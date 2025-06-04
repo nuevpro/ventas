@@ -34,10 +34,16 @@ const CreateChallengeDialog = ({ onCreateChallenge, loading = false }: CreateCha
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    if (!formData.title.trim()) {
+      return;
+    }
+
     try {
+      console.log('Submitting form with data:', formData);
+      
       await onCreateChallenge({
-        title: formData.title,
-        description: formData.description,
+        title: formData.title.trim(),
+        description: formData.description.trim(),
         challengeType: formData.challengeType,
         difficultyLevel: formData.difficultyLevel,
         targetScore: formData.targetScore ? parseInt(formData.targetScore) : undefined,
@@ -47,7 +53,7 @@ const CreateChallengeDialog = ({ onCreateChallenge, loading = false }: CreateCha
         teamId: formData.teamId || undefined
       });
 
-      // Reset form
+      // Reset form only on success
       setFormData({
         title: '',
         description: '',
@@ -61,7 +67,8 @@ const CreateChallengeDialog = ({ onCreateChallenge, loading = false }: CreateCha
       });
       setOpen(false);
     } catch (error) {
-      console.error('Error creating challenge:', error);
+      console.error('Error in form submission:', error);
+      // Don't close dialog on error so user can retry
     }
   };
 
@@ -267,7 +274,7 @@ const CreateChallengeDialog = ({ onCreateChallenge, loading = false }: CreateCha
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={loading || !formData.title}>
+            <Button type="submit" disabled={loading || !formData.title.trim()}>
               {loading ? 'Creando...' : 'Crear Desafío'}
             </Button>
           </div>

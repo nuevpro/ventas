@@ -10,18 +10,16 @@ import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { User, Mail, Calendar, Trophy, Target, Star, Settings, Camera } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
-import { useUserStats } from '@/hooks/useUserStats';
-import { useAchievements } from '@/hooks/useAchievements';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 
 const Profile = () => {
   const { user } = useAuth();
-  const { stats, refreshStats } = useUserStats();
-  const { achievements } = useAchievements();
   const { toast } = useToast();
   
   const [profile, setProfile] = useState<any>(null);
+  const [stats, setStats] = useState<any>(null);
+  const [achievements, setAchievements] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState({
@@ -30,29 +28,33 @@ const Profile = () => {
   });
 
   useEffect(() => {
-    loadProfile();
+    if (user?.id) {
+      loadProfileData();
+    }
   }, [user]);
 
-  const loadProfile = async () => {
+  const loadProfileData = async () => {
     if (!user?.id) return;
 
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      
+      // Cargar perfil
+      const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', user.id)
         .maybeSingle();
 
-      if (error && error.code !== 'PGRST116') {
-        throw error;
+      if (profileError && profileError.code !== 'PGRST116') {
+        throw profileError;
       }
 
-      if (data) {
-        setProfile(data);
+      if (profileData) {
+        setProfile(profileData);
         setFormData({
-          full_name: data.full_name || '',
-          avatar_url: data.avatar_url || ''
+          full_name: profileData.full_name || '',
+          avatar_url: profileData.avatar_url || ''
         });
       } else {
         // Crear perfil si no existe
@@ -77,6 +79,26 @@ const Profile = () => {
           avatar_url: insertedProfile.avatar_url || ''
         });
       }
+
+      // Cargar estadísticas
+      const { data: statsData } = await supabase
+        .from('user_stats')
+        .select('*')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      setStats(statsData);
+
+      // Cargar logros
+      const { data: achievementsData } = await supabase
+        .from('user_achievements')
+        .select(`
+          *,
+          achievement:achievements(*)
+        `)
+        .eq('user_id', user.id);
+
+      setAchievements(achievementsData || []);
     } catch (error) {
       console.error('Error loading profile:', error);
       toast({
@@ -110,7 +132,7 @@ const Profile = () => {
         description: "Tus cambios han sido guardados correctamente",
       });
 
-      loadProfile(); // Recargar para mostrar cambios
+      loadProfileData();
     } catch (error) {
       console.error('Error updating profile:', error);
       toast({
@@ -303,12 +325,6 @@ const Profile = () => {
                       <span className="text-sm text-gray-600">Racha actual</span>
                       <span className="font-medium">{stats?.current_streak || 0} días</span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-gray-600">XP por logros</span>
-                      <span className="font-medium">
-                        {earnedAchievements.reduce((sum, ua) => sum + (ua.achievement.xp_reward || 0), 0)} XP
-                      </span>
-                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -324,7 +340,7 @@ const Profile = () => {
                     <Star className="h-5 w-5 mr-2" />
                     Logros Desbloqueados
                   </div>
-                  <Badge variant="outline">{earnedAchievements.length} de {achievements.length}</Badge>
+                  <Badge variant="outline">{earnedAchievements.length}</Badge>
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -349,13 +365,13 @@ const Profile = () => {
                           <Trophy className="h-6 w-6 text-white" />
                         </div>
                         <div className="flex-1">
-                          <h4 className="font-medium">{userAchievement.achievement.title}</h4>
+                          <h4 className="font-medium">{userAchievement.achievement?.title}</h4>
                           <p className="text-sm text-gray-600">
-                            {userAchievement.achievement.description}
+                            {userAchievement.achievement?.description}
                           </p>
                           <div className="flex items-center space-x-2 mt-1">
                             <Badge variant="secondary" className="text-xs">
-                              +{userAchievement.achievement.xp_reward || 0} XP
+                              +{userAchievement.achievement?.xp_reward || 0} XP
                             </Badge>
                             <span className="text-xs text-gray-500">
                               {userAchievement.earned_at ? 
