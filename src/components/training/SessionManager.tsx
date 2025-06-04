@@ -18,6 +18,15 @@ interface SessionEndData {
   scenario: string;
 }
 
+interface ConversationLog {
+  scenario?: string;
+  client_emotion?: string;
+  interaction_mode?: string;
+  selected_voice?: string;
+  messages?: any[];
+  duration?: number;
+}
+
 export const useSessionManager = () => {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -87,9 +96,13 @@ export const useSessionManager = () => {
 
       if (fetchError) throw fetchError;
 
+      // Type guard para conversation_log
+      const conversationLog = session.conversation_log as ConversationLog | null;
+      const existingMessages = conversationLog?.messages || [];
+
       // Agregar el nuevo mensaje
       const updatedMessages = [
-        ...(session.conversation_log?.messages || []),
+        ...existingMessages,
         {
           id: Date.now().toString(),
           content,
@@ -104,7 +117,7 @@ export const useSessionManager = () => {
         .from('training_sessions')
         .update({
           conversation_log: {
-            ...session.conversation_log,
+            ...(conversationLog || {}),
             messages: updatedMessages
           }
         })
@@ -203,7 +216,9 @@ export const useSessionManager = () => {
 
       if (error) throw error;
 
-      return session.conversation_log?.messages || [];
+      // Type guard para conversation_log
+      const conversationLog = session.conversation_log as ConversationLog | null;
+      return conversationLog?.messages || [];
     } catch (error) {
       console.error('Error fetching session messages:', error);
       return [];
