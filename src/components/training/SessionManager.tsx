@@ -5,14 +5,11 @@ import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import type { Database } from '@/integrations/supabase/types';
 
-// Use the actual database types
 type DbTrainingSession = Database['public']['Tables']['training_sessions']['Row'];
 type DbTrainingSessionInsert = Database['public']['Tables']['training_sessions']['Insert'];
-type DbTrainingSessionUpdate = Database['public']['Tables']['training_sessions']['Update'];
 type DbConversationMessage = Database['public']['Tables']['conversation_messages']['Row'];
 type DbSessionEvaluation = Database['public']['Tables']['session_evaluations']['Row'];
 
-// Extended interface for our application logic
 interface SessionData extends DbTrainingSession {
   scenario_title?: string;
   client_emotion?: string;
@@ -54,6 +51,7 @@ export class SessionManager {
 
   setUserId(userId: string) {
     this.userId = userId;
+    console.log('Setting user ID in SessionManager:', userId);
   }
 
   async startSession(config: any): Promise<string | null> {
@@ -70,11 +68,10 @@ export class SessionManager {
     try {
       console.log('Creating session with user ID:', this.userId);
       
-      // Create conversation log object that matches the expected format
       const conversationLog = {
         scenario_title: config.scenarioTitle || 'Entrenamiento General',
         client_emotion: config.clientEmotion || 'neutral',
-        interaction_mode: config.interactionMode || 'call',
+        interaction_mode: config.interactionMode || 'chat',
         voice_used: config.selectedVoice || null,
         session_status: 'in_progress',
         started_at: new Date().toISOString(),
@@ -83,10 +80,9 @@ export class SessionManager {
         ai_words_count: 0
       };
 
-      // Create a session data object that matches the database schema
       const sessionData: DbTrainingSessionInsert = {
         user_id: this.userId,
-        scenario_id: config.scenario || 'default-scenario',
+        scenario_id: config.scenario || 'sales-cold-call',
         duration_minutes: 0,
         score: 0,
         conversation_log: conversationLog as any
@@ -110,7 +106,6 @@ export class SessionManager {
         return null;
       }
 
-      // Extend the session data with our application fields
       this.currentSession = {
         ...data,
         scenario_title: conversationLog.scenario_title,
@@ -142,149 +137,90 @@ export class SessionManager {
     }
   }
 
-  async saveMessage(content: string, sender: 'user' | 'ai', timestampInSession: number, audioUrl?: string): Promise<boolean> {
-    if (!this.currentSession) {
-      console.error('No active session');
-      return false;
-    }
-
+  async saveMessage(sessionId: string, content: string, sender: 'user' | 'ai', timestampInSession: number): Promise<void> {
     try {
-      const messageData = {
-        session_id: this.currentSession.id,
-        sender,
-        content,
-        timestamp_in_session: timestampInSession,
-        audio_url: audioUrl || null
-      };
-
       const { error } = await supabase
         .from('conversation_messages')
-        .insert(messageData);
+        .insert({
+          session_id: sessionId,
+          content,
+          sender,
+          timestamp_in_session: timestampInSession
+        });
 
       if (error) {
         console.error('Error saving message:', error);
-        return false;
+        throw error;
       }
-
-      // Update session counters in conversation_log
-      const wordCount = content.split(' ').length;
-      const currentLog = (this.currentSession.conversation_log as any) || {};
-      
-      const updatedLog = {
-        ...currentLog,
-        total_messages: (this.currentSession.total_messages || 0) + 1,
-        user_words_count: sender === 'user' 
-          ? (this.currentSession.user_words_count || 0) + wordCount
-          : (this.currentSession.user_words_count || 0),
-        ai_words_count: sender === 'ai'
-          ? (this.currentSession.ai_words_count || 0) + wordCount
-          : (this.currentSession.ai_words_count || 0)
-      };
-
-      await supabase
-        .from('training_sessions')
-        .update({ conversation_log: updatedLog as any })
-        .eq('id', this.currentSession.id);
-
-      // Update local session
-      this.currentSession.total_messages = updatedLog.total_messages;
-      this.currentSession.user_words_count = updatedLog.user_words_count;
-      this.currentSession.ai_words_count = updatedLog.ai_words_count;
-      this.currentSession.conversation_log = updatedLog as any;
-
-      console.log('Message saved successfully:', messageData);
-      return true;
     } catch (error) {
       console.error('Error saving message:', error);
-      return false;
     }
   }
 
-  async saveRealTimeMetric(metricName: string, metricValue: number): Promise<void> {
-    if (!this.currentSession) return;
-
+  async saveRealTimeMetric(sessionId: string, metricName: string, metricValue: number): Promise<void> {
     try {
-      await supabase
+      const { error } = await supabase
         .from('real_time_metrics')
         .insert({
-          session_id: this.currentSession.id,
+          session_id: sessionId,
           metric_name: metricName,
           metric_value: metricValue
         });
-      
-      console.log('Real-time metric saved:', metricName, metricValue);
+
+      if (error) {
+        console.error('Error saving real-time metric:', error);
+        throw error;
+      }
     } catch (error) {
-      console.error('Error saving metric:', error);
+      console.error('Error saving real-time metric:', error);
     }
   }
 
-  async endSession(evaluation?: any): Promise<void> {
-    if (!this.currentSession) return;
-
+  async endSession(sessionId: string, finalScore: number): Promise<void> {
     try {
-      const endTime = new Date();
-      const startTime = new Date(this.currentSession.started_at || this.currentSession.created_at || new Date());
-      const durationMinutes = Math.floor((endTime.getTime() - startTime.getTime()) / (1000 * 60));
+      const endTime = new Date().toISOString();
+      const currentSession = this.currentSession;
+      
+      if (currentSession && currentSession.conversation_log) {
+        const updatedConversationLog = {
+          ...currentSession.conversation_log as any,
+          session_status: 'completed',
+          ended_at: endTime
+        };
 
-      const currentLog = (this.currentSession.conversation_log as any) || {};
-      const updatedLog = {
-        ...currentLog,
-        session_status: 'completed',
-        ended_at: endTime.toISOString()
-      };
+        const { error } = await supabase
+          .from('training_sessions')
+          .update({
+            completed_at: endTime,
+            score: finalScore,
+            conversation_log: updatedConversationLog
+          })
+          .eq('id', sessionId);
 
-      // Calculate final score based on evaluation
-      let finalScore = 0;
-      if (evaluation && evaluation.overallScore) {
-        finalScore = Math.round(evaluation.overallScore);
+        if (error) {
+          console.error('Error ending session:', error);
+          throw error;
+        }
+
+        this.currentSession = null;
       }
-
-      await supabase
-        .from('training_sessions')
-        .update({
-          completed_at: endTime.toISOString(),
-          duration_minutes: durationMinutes,
-          score: finalScore,
-          conversation_log: updatedLog as any
-        })
-        .eq('id', this.currentSession.id);
-
-      if (evaluation) {
-        await this.saveEvaluation(evaluation);
-      }
-
-      console.log('Session ended successfully:', this.currentSession.id);
-      this.currentSession = null;
     } catch (error) {
       console.error('Error ending session:', error);
     }
   }
 
-  async saveEvaluation(evaluation: any): Promise<void> {
-    if (!this.currentSession) return;
-
+  async saveEvaluation(sessionId: string, evaluation: Partial<SessionEvaluation>): Promise<void> {
     try {
-      const evaluationData = {
-        session_id: this.currentSession.id,
-        rapport_score: evaluation.rapport ? Math.round(evaluation.rapport) : null,
-        clarity_score: evaluation.clarity ? Math.round(evaluation.clarity) : null,
-        empathy_score: evaluation.empathy ? Math.round(evaluation.empathy) : null,
-        accuracy_score: evaluation.accuracy ? Math.round(evaluation.accuracy) : null,
-        overall_score: evaluation.overallScore ? Math.round(evaluation.overallScore) : null,
-        strengths: evaluation.strengths || [],
-        improvements: evaluation.improvements || [],
-        specific_feedback: evaluation.specificFeedback || null,
-        ai_analysis: evaluation.aiAnalysis || null
-      };
-
       const { error } = await supabase
         .from('session_evaluations')
-        .insert(evaluationData);
+        .insert({
+          session_id: sessionId,
+          ...evaluation
+        });
 
       if (error) {
         console.error('Error saving evaluation:', error);
-      } else {
-        console.log('Evaluation saved successfully');
+        throw error;
       }
     } catch (error) {
       console.error('Error saving evaluation:', error);
@@ -314,7 +250,6 @@ export class SessionManager {
 
       console.log('Sessions fetched successfully:', data?.length || 0);
 
-      // Transform the data to include our extended fields
       return (data || []).map(session => ({
         ...session,
         scenario_title: (session.conversation_log as any)?.scenario_title,
@@ -344,16 +279,16 @@ export class SessionManager {
         .order('timestamp_in_session', { ascending: true });
 
       if (error) {
-        console.error('Error fetching messages:', error);
+        console.error('Error fetching session messages:', error);
         return [];
       }
 
       return (data || []).map(msg => ({
         ...msg,
         sender: msg.sender as 'user' | 'ai'
-      })) as Message[];
+      }));
     } catch (error) {
-      console.error('Error fetching messages:', error);
+      console.error('Error fetching session messages:', error);
       return [];
     }
   }
@@ -367,13 +302,13 @@ export class SessionManager {
         .maybeSingle();
 
       if (error) {
-        console.error('Error fetching evaluation:', error);
+        console.error('Error fetching session evaluation:', error);
         return null;
       }
 
-      return data as SessionEvaluation | null;
+      return data;
     } catch (error) {
-      console.error('Error fetching evaluation:', error);
+      console.error('Error fetching session evaluation:', error);
       return null;
     }
   }
@@ -383,7 +318,6 @@ export class SessionManager {
   }
 }
 
-// Hook para usar el SessionManager
 export const useSessionManager = () => {
   const { user } = useAuth();
   const { toast } = useToast();
