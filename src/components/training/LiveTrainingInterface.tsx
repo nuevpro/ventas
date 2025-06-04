@@ -2,13 +2,14 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Mic, MicOff, Volume2, VolumeX, Phone, PhoneOff, Pause, Play } from 'lucide-react';
+import { Mic, MicOff, Volume2, VolumeX, Phone, PhoneOff, Pause, Play, Shuffle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import ConversationTranscript from './ConversationTranscript';
 import ChatInterface from './ChatInterface';
 import RealTimeEvaluation from './RealTimeEvaluation';
 import { useSessionManager } from './SessionManager';
+import { getRandomVoice, type RandomVoiceSelection } from '@/utils/randomVoiceSelector';
 
 interface LiveTrainingInterfaceProps {
   config: any;
@@ -40,6 +41,7 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
   const [sessionTime, setSessionTime] = useState(0);
   const [callStatus, setCallStatus] = useState('connecting');
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [selectedVoice, setSelectedVoice] = useState<RandomVoiceSelection | null>(null);
   const [realTimeMetrics, setRealTimeMetrics] = useState<RealTimeMetrics>({
     rapport: 75,
     clarity: 80,
@@ -59,6 +61,15 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
   const recognitionRef = useRef<any>(null);
   const pauseStartRef = useRef<Date | null>(null);
   const totalPauseTimeRef = useRef<number>(0);
+
+  // Seleccionar voz aleatoria al iniciar
+  useEffect(() => {
+    if (!selectedVoice) {
+      const randomVoice = getRandomVoice();
+      setSelectedVoice(randomVoice);
+      console.log('Voz seleccionada:', randomVoice);
+    }
+  }, [selectedVoice]);
 
   useEffect(() => {
     if (isActive && !isPaused) {
@@ -115,7 +126,16 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
   }, []);
 
   const initializeSession = async () => {
-    const newSessionId = await sessionManager.startSession(config);
+    const enhancedConfig = {
+      ...config,
+      selectedVoice: selectedVoice?.voiceId,
+      selectedVoiceName: selectedVoice?.voiceName,
+      voicePersonality: selectedVoice?.personality,
+      emotionalContext: selectedVoice?.emotionalContext,
+      conversationStyle: selectedVoice?.conversationStyle
+    };
+
+    const newSessionId = await sessionManager.startSession(enhancedConfig);
     if (newSessionId) {
       setSessionId(newSessionId);
     }
@@ -126,7 +146,7 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
         setCallStatus('connected');
         toast({
           title: "Llamada conectada",
-          description: "El cliente virtual está en línea",
+          description: `Conectado con ${selectedVoice?.voiceName}`,
         });
         setTimeout(() => {
           sendInitialGreeting();
@@ -148,6 +168,9 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
           scenario: config.scenario,
           clientEmotion: config.clientEmotion,
           interactionMode: config.interactionMode,
+          voicePersonality: selectedVoice?.personality,
+          emotionalContext: selectedVoice?.emotionalContext,
+          conversationStyle: selectedVoice?.conversationStyle,
           isInitial: true
         },
       });
@@ -164,8 +187,8 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
       setMessages([aiMessage]);
       await sessionManager.saveMessage(data.response, 'ai', sessionTime, undefined);
 
-      if (audioEnabled && config.interactionMode === 'call') {
-        await generateAndPlayAudio(data.response, data.voice);
+      if (audioEnabled && config.interactionMode === 'call' && selectedVoice) {
+        await generateAndPlayAudio(data.response, selectedVoice.voiceId);
       } else {
         setIsSpeaking(false);
       }
@@ -181,12 +204,12 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
     }
   };
 
-  const generateAndPlayAudio = async (text: string, voice: string) => {
+  const generateAndPlayAudio = async (text: string, voiceId: string) => {
     try {
       const { data, error } = await supabase.functions.invoke('text-to-speech', {
         body: { 
           text, 
-          voice: voice || 'Sarah',
+          voice: voiceId,
           model: 'eleven_multilingual_v2'
         },
       });
@@ -224,6 +247,9 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
           message: content,
           scenario: config.scenario,
           clientEmotion: config.clientEmotion,
+          voicePersonality: selectedVoice?.personality,
+          emotionalContext: selectedVoice?.emotionalContext,
+          conversationStyle: selectedVoice?.conversationStyle,
           conversationHistory: messages.slice(-5),
         },
       });
@@ -241,8 +267,8 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
       await sessionManager.saveMessage(data.response, 'ai', sessionTime);
       updateRealTimeMetrics(content, data.response);
 
-      if (audioEnabled && config.interactionMode === 'call') {
-        await generateAndPlayAudio(data.response, data.voice);
+      if (audioEnabled && config.interactionMode === 'call' && selectedVoice) {
+        await generateAndPlayAudio(data.response, selectedVoice.voiceId);
       } else {
         setIsSpeaking(false);
       }
@@ -314,6 +340,15 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
     }
   };
 
+  const changeVoice = () => {
+    const newVoice = getRandomVoice();
+    setSelectedVoice(newVoice);
+    toast({
+      title: "Voz cambiada",
+      description: `Ahora hablas con ${newVoice.voiceName}`,
+    });
+  };
+
   const endSession = async () => {
     setIsActive(false);
     setCallStatus('ended');
@@ -353,7 +388,8 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
         ...data,
         realTimeMetrics,
         transcript: messages,
-        sessionDuration: sessionTime
+        sessionDuration: sessionTime,
+        voiceUsed: selectedVoice
       };
 
       await sessionManager.endSession(evaluation);
@@ -374,11 +410,23 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
               </div>
               <h3 className="text-lg font-semibold mb-2">¿Listo para comenzar?</h3>
               <p className="text-gray-600 dark:text-gray-400 mb-4">
-                Vas a entrenar con un cliente virtual usando la voz {config.selectedVoiceName || 'predeterminada'}
+                Vas a entrenar con {selectedVoice?.voiceName || 'un cliente virtual'}
               </p>
-              <Button onClick={() => setIsActive(true)} className="w-full" size="lg">
-                Iniciar {config.interactionMode === 'call' ? 'Llamada' : 'Chat'}
-              </Button>
+              {selectedVoice && (
+                <div className="bg-purple-50 dark:bg-purple-900/20 p-3 rounded-lg mb-4 text-sm">
+                  <p><strong>Personalidad:</strong> {selectedVoice.personality}</p>
+                  <p><strong>Contexto:</strong> {selectedVoice.emotionalContext}</p>
+                  <p><strong>Estilo:</strong> {selectedVoice.conversationStyle}</p>
+                </div>
+              )}
+              <div className="flex gap-2">
+                <Button onClick={() => setIsActive(true)} className="flex-1" size="lg">
+                  Iniciar {config.interactionMode === 'call' ? 'Llamada' : 'Chat'}
+                </Button>
+                <Button onClick={changeVoice} variant="outline" size="lg">
+                  <Shuffle className="h-4 w-4" />
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -391,7 +439,7 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
                 <div>Escenario: {config.scenario}</div>
                 <div>Cliente: {config.clientEmotion}</div>
                 <div>Modo: {config.interactionMode}</div>
-                <div>Voz: {config.selectedVoiceName || 'Predeterminada'}</div>
+                <div>Voz: {selectedVoice?.voiceName || 'Seleccionando...'}</div>
               </div>
             </CardContent>
           </Card>
@@ -420,7 +468,7 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
             </Badge>
             <div className="text-sm">
               <div><strong>Duración:</strong> {Math.floor(sessionTime / 60)}:{(sessionTime % 60).toString().padStart(2, '0')}</div>
-              <div><strong>Mensajes:</strong> {messages.length}</div>
+              <div><strong>Cliente:</strong> {selectedVoice?.voiceName}</div>
             </div>
           </div>
           
@@ -480,11 +528,11 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
                 <div className="h-full flex flex-col items-center justify-center space-y-6">
                   <div className="text-center">
                     <div className="text-xl font-medium mb-2">
-                      {isPaused ? 'Sesión Pausada' : 'Cliente Virtual Activo'}
+                      {isPaused ? 'Sesión Pausada' : `Hablando con ${selectedVoice?.voiceName}`}
                     </div>
                     <div className="text-gray-600 dark:text-gray-400">
                       {isPaused ? "Presiona Reanudar para continuar" :
-                       isSpeaking ? "El cliente está hablando..." : 
+                       isSpeaking ? `${selectedVoice?.voiceName} está hablando...` : 
                        isListening ? "Puedes responder ahora..." : 
                        "Conversación en pausa"}
                     </div>
