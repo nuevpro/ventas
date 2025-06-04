@@ -75,6 +75,51 @@ export type Database = {
         }
         Relationships: []
       }
+      challenge_invitations: {
+        Row: {
+          challenge_id: string | null
+          created_at: string | null
+          id: string
+          invited_by: string | null
+          responded_at: string | null
+          status: string | null
+          team_id: string | null
+        }
+        Insert: {
+          challenge_id?: string | null
+          created_at?: string | null
+          id?: string
+          invited_by?: string | null
+          responded_at?: string | null
+          status?: string | null
+          team_id?: string | null
+        }
+        Update: {
+          challenge_id?: string | null
+          created_at?: string | null
+          id?: string
+          invited_by?: string | null
+          responded_at?: string | null
+          status?: string | null
+          team_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "challenge_invitations_challenge_id_fkey"
+            columns: ["challenge_id"]
+            isOneToOne: false
+            referencedRelation: "challenges"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "challenge_invitations_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       challenge_participants: {
         Row: {
           challenge_id: string | null
@@ -117,46 +162,72 @@ export type Database = {
         Row: {
           challenge_type: string | null
           created_at: string | null
+          created_by: string | null
           description: string | null
           difficulty_level: number | null
           end_date: string | null
           id: string
           is_active: boolean | null
+          is_custom: boolean | null
           max_participants: number | null
+          objective_type: string | null
+          objective_value: number | null
           reward_xp: number | null
           start_date: string | null
+          target_score: number | null
+          team_id: string | null
           title: string
           updated_at: string | null
         }
         Insert: {
           challenge_type?: string | null
           created_at?: string | null
+          created_by?: string | null
           description?: string | null
           difficulty_level?: number | null
           end_date?: string | null
           id?: string
           is_active?: boolean | null
+          is_custom?: boolean | null
           max_participants?: number | null
+          objective_type?: string | null
+          objective_value?: number | null
           reward_xp?: number | null
           start_date?: string | null
+          target_score?: number | null
+          team_id?: string | null
           title: string
           updated_at?: string | null
         }
         Update: {
           challenge_type?: string | null
           created_at?: string | null
+          created_by?: string | null
           description?: string | null
           difficulty_level?: number | null
           end_date?: string | null
           id?: string
           is_active?: boolean | null
+          is_custom?: boolean | null
           max_participants?: number | null
+          objective_type?: string | null
+          objective_value?: number | null
           reward_xp?: number | null
           start_date?: string | null
+          target_score?: number | null
+          team_id?: string | null
           title?: string
           updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "challenges_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       conversation_messages: {
         Row: {
@@ -625,6 +696,21 @@ export type Database = {
         Args: { p_user_id: string }
         Returns: undefined
       }
+      create_custom_challenge: {
+        Args: {
+          p_title: string
+          p_description: string
+          p_challenge_type: string
+          p_difficulty_level?: number
+          p_target_score?: number
+          p_objective_type?: string
+          p_objective_value?: number
+          p_end_date?: string
+          p_team_id?: string
+          p_is_public?: boolean
+        }
+        Returns: string
+      }
       halfvec_avg: {
         Args: { "": number[] }
         Returns: unknown
@@ -657,6 +743,10 @@ export type Database = {
         Args: { "": unknown }
         Returns: unknown
       }
+      invite_team_to_challenge: {
+        Args: { p_challenge_id: string; p_team_id: string }
+        Returns: boolean
+      }
       ivfflat_bit_support: {
         Args: { "": unknown }
         Returns: unknown
@@ -676,6 +766,10 @@ export type Database = {
       l2_normalize: {
         Args: { "": string } | { "": unknown } | { "": unknown }
         Returns: unknown
+      }
+      respond_to_challenge_invitation: {
+        Args: { p_invitation_id: string; p_response: string }
+        Returns: boolean
       }
       sparsevec_out: {
         Args: { "": unknown }

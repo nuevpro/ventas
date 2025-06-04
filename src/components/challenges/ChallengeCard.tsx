@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Calendar, Users, Trophy, Target } from 'lucide-react';
+import { Calendar, Users, Trophy, Target, Star, Crown } from 'lucide-react';
 
 interface Challenge {
   id: string;
@@ -17,6 +17,9 @@ interface Challenge {
   is_participating: boolean;
   participant_count: number;
   user_score: number | null;
+  is_custom?: boolean;
+  created_by?: string;
+  target_score?: number | null;
 }
 
 interface ChallengeCardProps {
@@ -59,11 +62,25 @@ const ChallengeCard = ({ challenge, onJoin, onLeave, loading = false }: Challeng
     return `${diffDays} días restantes`;
   };
 
+  const getProgressPercentage = () => {
+    if (!challenge.user_score || !challenge.target_score) return 0;
+    return Math.min((challenge.user_score / challenge.target_score) * 100, 100);
+  };
+
   return (
-    <Card className="hover:shadow-lg transition-shadow">
+    <Card className="hover:shadow-lg transition-shadow relative">
+      {challenge.is_custom && (
+        <div className="absolute top-2 left-2">
+          <Badge variant="secondary" className="flex items-center space-x-1">
+            <Star className="h-3 w-3" />
+            <span>Personalizado</span>
+          </Badge>
+        </div>
+      )}
+      
       <CardHeader>
         <div className="flex items-start justify-between">
-          <div>
+          <div className="flex-1 pr-2">
             <CardTitle className="text-lg">{challenge.title}</CardTitle>
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
               {challenge.description}
@@ -99,19 +116,30 @@ const ChallengeCard = ({ challenge, onJoin, onLeave, loading = false }: Challeng
               <span>{formatTimeRemaining(challenge.end_date)}</span>
             </div>
           )}
+          {challenge.target_score && (
+            <div className="flex items-center space-x-2 col-span-2">
+              <Target className="h-4 w-4 text-blue-500" />
+              <span>Meta: {challenge.target_score} puntos</span>
+            </div>
+          )}
         </div>
 
         {/* Progreso del usuario si está participando */}
-        {challenge.is_participating && challenge.user_score !== null && (
+        {challenge.is_participating && (
           <div className="space-y-2">
             <div className="flex items-center justify-between text-sm">
               <span className="flex items-center space-x-1">
                 <Target className="h-4 w-4" />
                 <span>Tu progreso</span>
               </span>
-              <span className="font-medium">{challenge.user_score} puntos</span>
+              <span className="font-medium">
+                {challenge.user_score || 0} 
+                {challenge.target_score && ` / ${challenge.target_score}`} puntos
+              </span>
             </div>
-            <Progress value={Math.min((challenge.user_score / 100) * 100, 100)} className="h-2" />
+            {challenge.target_score && (
+              <Progress value={getProgressPercentage()} className="h-2" />
+            )}
           </div>
         )}
 

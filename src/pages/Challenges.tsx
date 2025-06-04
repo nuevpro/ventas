@@ -4,14 +4,26 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Trophy, Users, Target, Calendar, Filter } from 'lucide-react';
+import { Trophy, Users, Target, Calendar, Filter, Plus, Trash2, Edit } from 'lucide-react';
 import { useChallenges } from '@/hooks/useChallenges';
 import ChallengeCard from '@/components/challenges/ChallengeCard';
+import CreateChallengeDialog from '@/components/challenges/CreateChallengeDialog';
+import { useAuth } from '@/hooks/useAuth';
 
 const Challenges = () => {
-  const { challenges, loading, joinChallenge, leaveChallenge } = useChallenges();
+  const { user } = useAuth();
+  const { 
+    challenges, 
+    customChallenges, 
+    loading, 
+    createCustomChallenge, 
+    joinChallenge, 
+    leaveChallenge,
+    deleteChallenge 
+  } = useChallenges();
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'individual' | 'team'>('all');
+  const [createLoading, setCreateLoading] = useState(false);
 
   const handleJoinChallenge = async (challengeId: string) => {
     setActionLoading(challengeId);
@@ -25,13 +37,34 @@ const Challenges = () => {
     setActionLoading(null);
   };
 
+  const handleDeleteChallenge = async (challengeId: string) => {
+    setActionLoading(challengeId);
+    await deleteChallenge(challengeId);
+    setActionLoading(null);
+  };
+
+  const handleCreateChallenge = async (challengeData: any) => {
+    setCreateLoading(true);
+    try {
+      await createCustomChallenge(challengeData);
+    } finally {
+      setCreateLoading(false);
+    }
+  };
+
   const filteredChallenges = challenges.filter(challenge => {
     if (filter === 'all') return true;
     return challenge.challenge_type === filter;
   });
 
-  const activeChallenges = filteredChallenges.filter(c => c.is_participating);
+  const filteredCustomChallenges = customChallenges.filter(challenge => {
+    if (filter === 'all') return true;
+    return challenge.challenge_type === filter;
+  });
+
+  const activeChallenges = [...filteredChallenges, ...filteredCustomChallenges].filter(c => c.is_participating);
   const availableChallenges = filteredChallenges.filter(c => !c.is_participating);
+  const userCustomChallenges = filteredCustomChallenges.filter(c => c.created_by === user?.id);
 
   if (loading) {
     return (
@@ -64,10 +97,14 @@ const Challenges = () => {
               Compite con otros usuarios y mejora tus habilidades
             </p>
           </div>
+          <CreateChallengeDialog 
+            onCreateChallenge={handleCreateChallenge}
+            loading={createLoading}
+          />
         </div>
 
         {/* Estadísticas rápidas */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <Card>
             <CardContent className="flex items-center p-6">
               <Target className="h-8 w-8 text-blue-600 mr-4" />
@@ -90,10 +127,20 @@ const Challenges = () => {
           
           <Card>
             <CardContent className="flex items-center p-6">
-              <Users className="h-8 w-8 text-green-600 mr-4" />
+              <Plus className="h-8 w-8 text-green-600 mr-4" />
+              <div>
+                <div className="text-2xl font-bold">{userCustomChallenges.length}</div>
+                <div className="text-sm text-gray-600">Mis Desafíos</div>
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardContent className="flex items-center p-6">
+              <Users className="h-8 w-8 text-purple-600 mr-4" />
               <div>
                 <div className="text-2xl font-bold">
-                  {challenges.reduce((sum, c) => sum + c.participant_count, 0)}
+                  {[...challenges, ...customChallenges].reduce((sum, c) => sum + c.participant_count, 0)}
                 </div>
                 <div className="text-sm text-gray-600">Total Participantes</div>
               </div>
@@ -140,9 +187,10 @@ const Challenges = () => {
 
         {/* Tabs de desafíos */}
         <Tabs defaultValue="available" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="available">Disponibles ({availableChallenges.length})</TabsTrigger>
-            <TabsTrigger value="active">Mis Desafíos ({activeChallenges.length})</TabsTrigger>
+            <TabsTrigger value="active">Mis Desafíos Activos ({activeChallenges.length})</TabsTrigger>
+            <TabsTrigger value="custom">Mis Creaciones ({userCustomChallenges.length})</TabsTrigger>
           </TabsList>
 
           <TabsContent value="available" className="space-y-6">
@@ -154,7 +202,7 @@ const Challenges = () => {
                     No hay desafíos disponibles
                   </h3>
                   <p className="text-gray-600 dark:text-gray-400">
-                    Vuelve pronto para ver nuevos desafíos
+                    Vuelve pronto para ver nuevos desafíos o crea uno personalizado
                   </p>
                 </CardContent>
               </Card>
@@ -184,9 +232,6 @@ const Challenges = () => {
                   <p className="text-gray-600 dark:text-gray-400 mb-4">
                     Únete a un desafío para competir y ganar experiencia
                   </p>
-                  <Button onClick={() => window.location.reload()}>
-                    Ver Desafíos Disponibles
-                  </Button>
                 </CardContent>
               </Card>
             ) : (
@@ -199,6 +244,50 @@ const Challenges = () => {
                     onLeave={handleLeaveChallenge}
                     loading={actionLoading === challenge.id}
                   />
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="custom" className="space-y-6">
+            {userCustomChallenges.length === 0 ? (
+              <Card>
+                <CardContent className="p-12 text-center">
+                  <Plus className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+                    No has creado ningún desafío
+                  </h3>
+                  <p className="text-gray-600 dark:text-gray-400 mb-4">
+                    Crea desafíos personalizados para ti y tu equipo
+                  </p>
+                  <CreateChallengeDialog 
+                    onCreateChallenge={handleCreateChallenge}
+                    loading={createLoading}
+                  />
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {userCustomChallenges.map((challenge) => (
+                  <div key={challenge.id} className="relative">
+                    <ChallengeCard
+                      challenge={challenge}
+                      onJoin={handleJoinChallenge}
+                      onLeave={handleLeaveChallenge}
+                      loading={actionLoading === challenge.id}
+                    />
+                    <div className="absolute top-2 right-2 flex space-x-1">
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => handleDeleteChallenge(challenge.id)}
+                        disabled={actionLoading === challenge.id}
+                        className="h-8 w-8 p-0"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
                 ))}
               </div>
             )}
