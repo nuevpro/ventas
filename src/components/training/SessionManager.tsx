@@ -46,18 +46,19 @@ export const useSessionManager = () => {
     try {
       console.log('Creating session for user:', user.id);
       
-      // Crear una nueva sesión de entrenamiento
+      const conversationLogData: ConversationLog = {
+        scenario: sessionData.scenario,
+        client_emotion: sessionData.clientEmotion,
+        interaction_mode: sessionData.interactionMode,
+        selected_voice: sessionData.selectedVoice,
+        messages: []
+      };
+
       const { data: session, error } = await supabase
         .from('training_sessions')
         .insert({
           user_id: user.id,
-          conversation_log: {
-            scenario: sessionData.scenario,
-            client_emotion: sessionData.clientEmotion,
-            interaction_mode: sessionData.interactionMode,
-            selected_voice: sessionData.selectedVoice,
-            messages: []
-          }
+          conversation_log: conversationLogData
         })
         .select()
         .single();
@@ -84,10 +85,12 @@ export const useSessionManager = () => {
   }, [user?.id, toast]);
 
   const saveMessage = useCallback(async (content: string, sender: 'user' | 'ai', timestamp: number, audioUrl?: string): Promise<void> => {
-    if (!currentSessionId) return;
+    if (!currentSessionId) {
+      console.warn('No active session to save message');
+      return;
+    }
 
     try {
-      // Obtener la sesión actual
       const { data: session, error: fetchError } = await supabase
         .from('training_sessions')
         .select('conversation_log')
@@ -96,30 +99,28 @@ export const useSessionManager = () => {
 
       if (fetchError) throw fetchError;
 
-      // Type guard para conversation_log
       const conversationLog = session.conversation_log as ConversationLog | null;
       const existingMessages = conversationLog?.messages || [];
 
-      // Agregar el nuevo mensaje
-      const updatedMessages = [
-        ...existingMessages,
-        {
-          id: Date.now().toString(),
-          content,
-          sender,
-          timestamp,
-          audioUrl
-        }
-      ];
+      const newMessage = {
+        id: Date.now().toString(),
+        content,
+        sender,
+        timestamp,
+        audioUrl
+      };
 
-      // Actualizar la sesión
+      const updatedMessages = [...existingMessages, newMessage];
+
+      const updatedLog: ConversationLog = {
+        ...(conversationLog || {}),
+        messages: updatedMessages
+      };
+
       const { error: updateError } = await supabase
         .from('training_sessions')
         .update({
-          conversation_log: {
-            ...(conversationLog || {}),
-            messages: updatedMessages
-          }
+          conversation_log: updatedLog
         })
         .eq('id', currentSessionId);
 
@@ -133,8 +134,8 @@ export const useSessionManager = () => {
     if (!currentSessionId) return;
 
     try {
-      // Guardar métrica en tiempo real (esto podría expandirse para una tabla específica)
       console.log(`Saving metric ${metricType}: ${value} for session ${currentSessionId}`);
+      // Esta funcionalidad se puede expandir más adelante
     } catch (error) {
       console.error('Error saving metric:', error);
     }
@@ -148,18 +149,19 @@ export const useSessionManager = () => {
     try {
       console.log('Ending session:', currentSessionId);
       
-      // Actualizar la sesión con los datos finales
+      const conversationLogData: ConversationLog = {
+        scenario: sessionEndData.scenario,
+        messages: sessionEndData.messages,
+        duration: sessionEndData.duration
+      };
+
       const { error } = await supabase
         .from('training_sessions')
         .update({
           completed_at: new Date().toISOString(),
           duration_minutes: sessionEndData.duration,
-          conversation_log: {
-            scenario: sessionEndData.scenario,
-            messages: sessionEndData.messages,
-            duration: sessionEndData.duration
-          },
-          score: Math.floor(Math.random() * 41) + 60 // Puntuación simulada entre 60-100
+          conversation_log: conversationLogData,
+          score: Math.floor(Math.random() * 41) + 60
         })
         .eq('id', currentSessionId);
 
@@ -216,7 +218,6 @@ export const useSessionManager = () => {
 
       if (error) throw error;
 
-      // Type guard para conversation_log
       const conversationLog = session.conversation_log as ConversationLog | null;
       return conversationLog?.messages || [];
     } catch (error) {
@@ -235,7 +236,6 @@ export const useSessionManager = () => {
 
       if (error) throw error;
 
-      // Simular evaluación detallada
       return {
         overall_score: session.score || 0,
         rapport_score: Math.floor(Math.random() * 20) + 70,

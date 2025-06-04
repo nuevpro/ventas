@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Mic, MicOff, Phone, PhoneOff, MessageCircle, Volume2, VolumeX, Pause, Play, Square } from 'lucide-react';
+import { useSessionManager } from './SessionManager';
+import { useToast } from '@/hooks/use-toast';
 
 interface TrainingConfig {
   scenarioTitle: string;
@@ -29,6 +31,10 @@ const VoiceTrainingInterface = ({ config, onEndSession }: VoiceTrainingInterface
   const [elapsedTime, setElapsedTime] = useState(0);
   const [messages, setMessages] = useState<any[]>([]);
   const [currentMessage, setCurrentMessage] = useState('');
+  const [sessionStarted, setSessionStarted] = useState(false);
+
+  const sessionManager = useSessionManager();
+  const { toast } = useToast();
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -40,16 +46,47 @@ const VoiceTrainingInterface = ({ config, onEndSession }: VoiceTrainingInterface
     return () => clearInterval(interval);
   }, [isActive, isPaused]);
 
-  const handleStartSession = () => {
-    setIsActive(true);
-    // Agregar mensaje inicial del cliente AI
-    const initialMessage = {
-      id: Date.now(),
-      sender: 'client',
-      content: getInitialClientMessage(),
-      timestamp: Date.now()
-    };
-    setMessages([initialMessage]);
+  const handleStartSession = async () => {
+    try {
+      const sessionId = await sessionManager.startSession({
+        scenario: config.scenarioTitle,
+        scenarioTitle: config.scenarioTitle,
+        clientEmotion: config.clientEmotion,
+        interactionMode: config.interactionMode,
+        selectedVoice: config.selectedVoice
+      });
+
+      if (sessionId) {
+        setIsActive(true);
+        setSessionStarted(true);
+        
+        const initialMessage = {
+          id: Date.now(),
+          sender: 'client',
+          content: getInitialClientMessage(),
+          timestamp: Date.now()
+        };
+        
+        setMessages([initialMessage]);
+        await sessionManager.saveMessage(
+          initialMessage.content,
+          'ai',
+          Math.floor(initialMessage.timestamp / 1000)
+        );
+
+        toast({
+          title: "Sesión iniciada",
+          description: "¡La conversación ha comenzado!",
+        });
+      }
+    } catch (error) {
+      console.error('Error starting session:', error);
+      toast({
+        title: "Error",
+        description: "No se pudo iniciar la sesión",
+        variant: "destructive",
+      });
+    }
   };
 
   const getInitialClientMessage = () => {
@@ -63,13 +100,29 @@ const VoiceTrainingInterface = ({ config, onEndSession }: VoiceTrainingInterface
     return emotionMessages[config.clientEmotion as keyof typeof emotionMessages] || emotionMessages.neutral;
   };
 
-  const handleEndSession = () => {
-    const sessionData = {
-      duration: Math.floor(elapsedTime / 60),
-      messages: messages,
-      scenario: config.scenarioTitle
-    };
-    onEndSession(sessionData);
+  const handleEndSession = async () => {
+    try {
+      const sessionData = {
+        duration: Math.floor(elapsedTime / 60),
+        messages: messages,
+        scenario: config.scenarioTitle
+      };
+
+      await sessionManager.endSession(sessionData);
+      onEndSession(sessionData);
+      
+      toast({
+        title: "Sesión finalizada",
+        description: "Tu entrenamiento ha sido guardado exitosamente",
+      });
+    } catch (error) {
+      console.error('Error ending session:', error);
+      toast({
+        title: "Error",
+        description: "Hubo un problema al finalizar la sesión",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleToggleMute = () => {
@@ -78,6 +131,55 @@ const VoiceTrainingInterface = ({ config, onEndSession }: VoiceTrainingInterface
 
   const handleTogglePause = () => {
     setIsPaused(!isPaused);
+  };
+
+  const handleSendMessage = async (content: string) => {
+    if (!content.trim() || !sessionStarted) return;
+
+    const userMessage = {
+      id: Date.now(),
+      sender: 'user',
+      content: content.trim(),
+      timestamp: Date.now()
+    };
+
+    setMessages(prev => [...prev, userMessage]);
+    await sessionManager.saveMessage(
+      userMessage.content,
+      'user',
+      Math.floor(userMessage.timestamp / 1000)
+    );
+
+    // Simular respuesta del cliente AI
+    setTimeout(async () => {
+      const aiResponse = generateAIResponse(content);
+      const aiMessage = {
+        id: Date.now() + 1,
+        sender: 'client',
+        content: aiResponse,
+        timestamp: Date.now()
+      };
+
+      setMessages(prev => [...prev, aiMessage]);
+      await sessionManager.saveMessage(
+        aiMessage.content,
+        'ai',
+        Math.floor(aiMessage.timestamp / 1000)
+      );
+    }, 1500);
+
+    setCurrentMessage('');
+  };
+
+  const generateAIResponse = (userMessage: string): string => {
+    const responses = [
+      "Entiendo su situación. ¿Podría proporcionarme más detalles?",
+      "Esa es una excelente pregunta. Permítame explicarle...",
+      "Comprendo su preocupación. Esto es lo que podemos hacer por usted...",
+      "Me parece perfecto. ¿Hay algo más específico que le gustaría saber?",
+      "Excelente punto. Basándome en lo que me dice..."
+    ];
+    return responses[Math.floor(Math.random() * responses.length)];
   };
 
   const formatTime = (seconds: number) => {
@@ -115,7 +217,6 @@ const VoiceTrainingInterface = ({ config, onEndSession }: VoiceTrainingInterface
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {/* Progreso */}
             <div>
               <div className="flex justify-between text-sm mb-2">
                 <span>Progreso de la sesión</span>
@@ -124,7 +225,6 @@ const VoiceTrainingInterface = ({ config, onEndSession }: VoiceTrainingInterface
               <Progress value={Math.min(100, progress)} className="h-2" />
             </div>
 
-            {/* Información de la sesión */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
               <div>
                 <span className="font-medium">Cliente:</span>
@@ -150,7 +250,6 @@ const VoiceTrainingInterface = ({ config, onEndSession }: VoiceTrainingInterface
               </div>
             </div>
 
-            {/* Objetivos */}
             <div>
               <span className="font-medium text-sm">Objetivos:</span>
               <div className="flex flex-wrap gap-2 mt-2">
@@ -199,7 +298,6 @@ const VoiceTrainingInterface = ({ config, onEndSession }: VoiceTrainingInterface
             </div>
           ) : (
             <div className="space-y-4">
-              {/* Área de mensajes */}
               <div className="h-64 overflow-y-auto border rounded p-4 space-y-3">
                 {messages.map((message) => (
                   <div
@@ -222,13 +320,32 @@ const VoiceTrainingInterface = ({ config, onEndSession }: VoiceTrainingInterface
                 ))}
               </div>
 
-              {/* Indicador de transcripción en tiempo real */}
+              {config.interactionMode === 'chat' && (
+                <div className="flex space-x-2">
+                  <input
+                    type="text"
+                    value={currentMessage}
+                    onChange={(e) => setCurrentMessage(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && handleSendMessage(currentMessage)}
+                    placeholder="Escribe tu mensaje..."
+                    className="flex-1 px-3 py-2 border rounded-lg"
+                    disabled={isPaused}
+                  />
+                  <Button
+                    onClick={() => handleSendMessage(currentMessage)}
+                    disabled={!currentMessage.trim() || isPaused}
+                  >
+                    Enviar
+                  </Button>
+                </div>
+              )}
+
               <div className="bg-blue-50 p-3 rounded-lg">
                 <div className="flex items-center text-sm text-blue-700">
                   <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse mr-2"></div>
                   {config.interactionMode === 'call' 
-                    ? "Escuchando... (funcionalidad de voz se implementará con ElevenLabs)"
-                    : "Escribiendo..."
+                    ? "Conversación activa (funcionalidad de voz se implementará con ElevenLabs)"
+                    : "Chat activo"
                   }
                 </div>
               </div>
