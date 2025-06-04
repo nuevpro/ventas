@@ -21,6 +21,8 @@ export const useKnowledgeBase = () => {
     try {
       setLoading(true);
       setError(null);
+      
+      console.log('Loading knowledge base documents...');
 
       const { data, error } = await supabase
         .from('knowledge_base')
@@ -28,14 +30,20 @@ export const useKnowledgeBase = () => {
         .order('created_at', { ascending: false });
 
       if (error) {
-        console.error('Error loading documents:', error);
+        console.error('Error loading knowledge base documents:', error);
         throw error;
       }
 
+      console.log('Knowledge base documents loaded successfully:', data);
       setDocuments(data || []);
     } catch (err) {
       console.error('Error in loadDocuments:', err);
-      setError(err instanceof Error ? err.message : 'Error desconocido');
+      setError(err instanceof Error ? err.message : 'Error desconocido al cargar documentos');
+      toast({
+        title: "Error",
+        description: "No se pudieron cargar los documentos",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
@@ -48,6 +56,8 @@ export const useKnowledgeBase = () => {
     tags?: string[];
   }) => {
     try {
+      console.log('Creating knowledge base document:', documentData);
+
       const { data, error } = await supabase
         .from('knowledge_base')
         .insert({
@@ -60,9 +70,11 @@ export const useKnowledgeBase = () => {
         .single();
 
       if (error) {
-        console.error('Error creating document:', error);
+        console.error('Error creating knowledge base document:', error);
         throw error;
       }
+
+      console.log('Knowledge base document created successfully:', data);
 
       toast({
         title: "¡Éxito!",
@@ -89,6 +101,8 @@ export const useKnowledgeBase = () => {
     tags?: string[];
   }) => {
     try {
+      console.log('Updating knowledge base document:', documentId, documentData);
+
       const { data, error } = await supabase
         .from('knowledge_base')
         .update({
@@ -103,9 +117,11 @@ export const useKnowledgeBase = () => {
         .single();
 
       if (error) {
-        console.error('Error updating document:', error);
+        console.error('Error updating knowledge base document:', error);
         throw error;
       }
+
+      console.log('Knowledge base document updated successfully:', data);
 
       toast({
         title: "¡Éxito!",
@@ -127,15 +143,19 @@ export const useKnowledgeBase = () => {
 
   const deleteDocument = async (documentId: string) => {
     try {
+      console.log('Deleting knowledge base document:', documentId);
+
       const { error } = await supabase
         .from('knowledge_base')
         .delete()
         .eq('id', documentId);
 
       if (error) {
-        console.error('Error deleting document:', error);
+        console.error('Error deleting knowledge base document:', error);
         throw error;
       }
+
+      console.log('Knowledge base document deleted successfully');
 
       toast({
         title: "¡Éxito!",

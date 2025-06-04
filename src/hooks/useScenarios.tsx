@@ -1,7 +1,6 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import type { Database } from '@/integrations/supabase/types';
 
@@ -9,22 +8,21 @@ type Scenario = Database['public']['Tables']['scenarios']['Row'];
 type ScenarioInsert = Database['public']['Tables']['scenarios']['Insert'];
 
 export const useScenarios = () => {
-  const { user } = useAuth();
   const { toast } = useToast();
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (user) {
-      loadScenarios();
-    }
-  }, [user]);
+    loadScenarios();
+  }, []);
 
   const loadScenarios = async () => {
     try {
       setLoading(true);
       setError(null);
+      
+      console.log('Loading scenarios from database...');
 
       const { data, error } = await supabase
         .from('scenarios')
@@ -39,10 +37,16 @@ export const useScenarios = () => {
         throw error;
       }
 
+      console.log('Scenarios loaded successfully:', data);
       setScenarios(data || []);
     } catch (err) {
       console.error('Error in loadScenarios:', err);
-      setError(err instanceof Error ? err.message : 'Error desconocido');
+      setError(err instanceof Error ? err.message : 'Error desconocido al cargar escenarios');
+      toast({
+        title: "Error",
+        description: "No se pudieron cargar los escenarios",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
@@ -57,6 +61,8 @@ export const useScenarios = () => {
     expected_outcomes?: any;
   }) => {
     try {
+      console.log('Creating scenario:', scenarioData);
+
       const { data, error } = await supabase.rpc('create_custom_scenario', {
         p_title: scenarioData.title,
         p_description: scenarioData.description,
@@ -71,6 +77,8 @@ export const useScenarios = () => {
         throw error;
       }
 
+      console.log('Scenario created successfully:', data);
+      
       toast({
         title: "¡Éxito!",
         description: "Escenario creado correctamente",
@@ -98,6 +106,8 @@ export const useScenarios = () => {
     expected_outcomes?: any;
   }) => {
     try {
+      console.log('Updating scenario:', scenarioId, scenarioData);
+
       const { data, error } = await supabase.rpc('update_scenario', {
         p_scenario_id: scenarioId,
         p_title: scenarioData.title,
@@ -112,6 +122,8 @@ export const useScenarios = () => {
         console.error('Error updating scenario:', error);
         throw error;
       }
+
+      console.log('Scenario updated successfully:', data);
 
       toast({
         title: "¡Éxito!",
@@ -132,12 +144,13 @@ export const useScenarios = () => {
   };
 
   const getScenariosByCategory = (category?: string) => {
-    if (!category) return scenarios;
+    if (!category || category === 'all') return scenarios;
     return scenarios.filter(scenario => scenario.scenario_type === category);
   };
 
   const getCategories = () => {
     const categories = [...new Set(scenarios.map(s => s.scenario_type))];
+    console.log('Available categories:', categories);
     return categories;
   };
 

@@ -55,9 +55,13 @@ const categoryConfig = {
 };
 
 const EnhancedScenarioSelector = ({ onSelectScenario }: EnhancedScenarioSelectorProps) => {
-  const { scenarios, loading, getScenariosByCategory, getCategories } = useScenarios();
+  const { scenarios, loading, error, getScenariosByCategory, getCategories } = useScenarios();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
+
+  console.log('EnhancedScenarioSelector - scenarios:', scenarios);
+  console.log('EnhancedScenarioSelector - loading:', loading);
+  console.log('EnhancedScenarioSelector - error:', error);
 
   const getDifficultyColor = (difficulty: number) => {
     const colors = {
@@ -78,7 +82,7 @@ const EnhancedScenarioSelector = ({ onSelectScenario }: EnhancedScenarioSelector
   };
 
   const filteredScenarios = scenarios.filter(scenario => {
-    const matchesSearch = scenario.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    const matchesSearch = scenario.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          scenario.description?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = selectedCategory === 'all' || scenario.scenario_type === selectedCategory;
     return matchesSearch && matchesCategory;
@@ -91,6 +95,17 @@ const EnhancedScenarioSelector = ({ onSelectScenario }: EnhancedScenarioSelector
       <div className="text-center py-8">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto mb-2"></div>
         <p className="text-gray-500">Cargando escenarios...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-8">
+        <p className="text-red-500 mb-4">Error al cargar escenarios: {error}</p>
+        <Button onClick={() => window.location.reload()}>
+          Recargar
+        </Button>
       </div>
     );
   }
