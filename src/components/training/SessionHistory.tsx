@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -26,7 +27,7 @@ const SessionHistory = ({ onViewSession }: SessionHistoryProps) => {
   const loadSessions = async () => {
     setLoading(true);
     try {
-      const userSessions = await sessionManager.getUserSessions();
+      const userSessions = await sessionManager.getUserSessions(50);
       setSessions(userSessions);
     } catch (error) {
       console.error('Error loading sessions:', error);
@@ -141,8 +142,8 @@ const SessionHistory = ({ onViewSession }: SessionHistoryProps) => {
                     <div className="flex items-center justify-between">
                       <div className="space-y-2">
                         <div className="flex items-center space-x-3">
-                          <h3 className="font-semibold">{session.scenario_title || 'Sesión de Entrenamiento'}</h3>
-                          {getStatusBadge(session.completed_at ? 'completed' : 'in_progress')}
+                          <h3 className="font-semibold">{session.scenario_title}</h3>
+                          {getStatusBadge(session.session_status)}
                         </div>
                         
                         <div className="flex items-center space-x-4 text-sm text-gray-600 dark:text-gray-400">
@@ -153,25 +154,25 @@ const SessionHistory = ({ onViewSession }: SessionHistoryProps) => {
                           
                           <div className="flex items-center space-x-1">
                             <Clock className="h-4 w-4" />
-                            <span>{session.duration_minutes || 0} min</span>
+                            <span>{formatDuration(session.duration_seconds)}</span>
                           </div>
                           
                           <div className="flex items-center space-x-1">
                             <MessageSquare className="h-4 w-4" />
-                            <span>{session.conversation_log?.messages?.length || 0} mensajes</span>
+                            <span>{session.total_messages} mensajes</span>
                           </div>
                         </div>
 
                         <div className="flex items-center space-x-4 text-sm">
-                          <span>Escenario: <strong>{session.conversation_log?.scenario || 'N/A'}</strong></span>
-                          <span>Cliente: <strong>{session.conversation_log?.client_emotion || 'N/A'}</strong></span>
-                          <span>Modo: <strong>{session.conversation_log?.interaction_mode === 'call' ? 'Llamada' : 'Chat'}</strong></span>
+                          <span>Cliente: <strong>{session.client_emotion}</strong></span>
+                          <span>Modo: <strong>{session.interaction_mode === 'call' ? 'Llamada' : 'Chat'}</strong></span>
+                          {session.voice_used && (
+                            <span>Voz: <strong>{session.voice_used}</strong></span>
+                          )}
                         </div>
                       </div>
 
                       <div className="flex items-center space-x-2">
-                        {session.score && getScoreBadge(session.score)}
-                        
                         <Button
                           variant="outline"
                           size="sm"
@@ -208,16 +209,22 @@ const SessionHistory = ({ onViewSession }: SessionHistoryProps) => {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div>
-                    <strong>Escenario:</strong> {selectedSession.conversation_log?.scenario || 'N/A'}
+                    <strong>Escenario:</strong> {selectedSession.scenario_title}
                   </div>
                   <div>
                     <strong>Fecha:</strong> {format(new Date(selectedSession.created_at), 'dd/MM/yyyy HH:mm', { locale: es })}
                   </div>
                   <div>
-                    <strong>Duración:</strong> {selectedSession.duration_minutes || 0} minutos
+                    <strong>Duración:</strong> {formatDuration(selectedSession.duration_seconds)}
                   </div>
                   <div>
-                    <strong>Total mensajes:</strong> {selectedSession.conversation_log?.messages?.length || 0}
+                    <strong>Total mensajes:</strong> {selectedSession.total_messages}
+                  </div>
+                  <div>
+                    <strong>Palabras del usuario:</strong> {selectedSession.user_words_count}
+                  </div>
+                  <div>
+                    <strong>Palabras de la IA:</strong> {selectedSession.ai_words_count}
                   </div>
                 </CardContent>
               </Card>
@@ -276,7 +283,7 @@ const SessionHistory = ({ onViewSession }: SessionHistoryProps) => {
                   <CardContent>
                     <div className="space-y-3 max-h-96 overflow-y-auto">
                       {sessionDetails.messages.map((message: any, index: number) => (
-                        <div key={message.id || index} className={`p-3 rounded-lg ${
+                        <div key={message.id} className={`p-3 rounded-lg ${
                           message.sender === 'user' 
                             ? 'bg-blue-50 dark:bg-blue-900/20 ml-12' 
                             : 'bg-gray-50 dark:bg-gray-800 mr-12'
@@ -286,7 +293,7 @@ const SessionHistory = ({ onViewSession }: SessionHistoryProps) => {
                               {message.sender === 'user' ? 'Usuario' : 'Cliente IA'}
                             </span>
                             <span className="text-xs text-gray-500">
-                              {Math.floor((message.timestamp || 0) / 60)}:{((message.timestamp || 0) % 60).toString().padStart(2, '0')}
+                              {Math.floor(message.timestamp_in_session / 60)}:{(message.timestamp_in_session % 60).toString().padStart(2, '0')}
                             </span>
                           </div>
                           <p className="text-sm">{message.content}</p>

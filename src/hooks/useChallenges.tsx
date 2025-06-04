@@ -6,6 +6,7 @@ import { useToast } from '@/hooks/use-toast';
 import type { Database } from '@/integrations/supabase/types';
 
 type Challenge = Database['public']['Tables']['challenges']['Row'];
+type ChallengeParticipant = Database['public']['Tables']['challenge_participants']['Row'];
 type ChallengeWithParticipation = Challenge & {
   is_participating: boolean;
   participant_count: number;
@@ -21,19 +22,17 @@ export const useChallenges = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (user?.id) {
-      loadChallenges();
-    } else {
+    if (!user?.id) {
       setLoading(false);
+      return;
     }
+
+    loadChallenges();
   }, [user?.id]);
 
   const loadChallenges = async () => {
-    if (!user?.id) return;
-
     try {
       setLoading(true);
-      setError(null);
 
       // Cargar desafíos públicos
       const { data: publicChallenges, error: publicError } = await supabase
@@ -43,10 +42,7 @@ export const useChallenges = () => {
         .eq('is_custom', false)
         .order('created_at', { ascending: false });
 
-      if (publicError) {
-        console.error('Error loading public challenges:', publicError);
-        throw publicError;
-      }
+      if (publicError) throw publicError;
 
       // Cargar desafíos personalizados
       const { data: userCustomChallenges, error: customError } = await supabase
@@ -56,10 +52,7 @@ export const useChallenges = () => {
         .eq('is_custom', true)
         .order('created_at', { ascending: false });
 
-      if (customError) {
-        console.error('Error loading custom challenges:', customError);
-        throw customError;
-      }
+      if (customError) throw customError;
 
       // Procesar desafíos públicos
       const processedPublic = await Promise.all(
@@ -73,7 +66,7 @@ export const useChallenges = () => {
             .from('challenge_participants')
             .select('*')
             .eq('challenge_id', challenge.id)
-            .eq('participant_id', user.id)
+            .eq('participant_id', user!.id)
             .eq('participant_type', 'user')
             .maybeSingle();
 
@@ -98,7 +91,7 @@ export const useChallenges = () => {
             .from('challenge_participants')
             .select('*')
             .eq('challenge_id', challenge.id)
-            .eq('participant_id', user.id)
+            .eq('participant_id', user!.id)
             .eq('participant_type', 'user')
             .maybeSingle();
 
@@ -115,13 +108,7 @@ export const useChallenges = () => {
       setCustomChallenges(processedCustom);
     } catch (err) {
       console.error('Error loading challenges:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Error desconocido';
-      setError(errorMessage);
-      toast({
-        title: "Error",
-        description: "No se pudieron cargar los desafíos",
-        variant: "destructive",
-      });
+      setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
       setLoading(false);
     }
@@ -138,91 +125,33 @@ export const useChallenges = () => {
     endDate?: string;
     teamId?: string;
   }) => {
-    if (!user?.id) {
-      toast({
-        title: "Error",
-        description: "Debes estar autenticado para crear desafíos",
-        variant: "destructive",
-      });
-      return;
-    }
-
     try {
-      console.log('Creating challenge with data:', challengeData);
-
       const { data, error } = await supabase.rpc('create_custom_challenge', {
         p_title: challengeData.title,
         p_description: challengeData.description,
         p_challenge_type: challengeData.challengeType,
         p_difficulty_level: challengeData.difficultyLevel,
-        p_target_score: challengeData.targetScore || null,
+        p_target_score: challengeData.targetScore,
         p_objective_type: challengeData.objectiveType || 'score',
-        p_objective_value: challengeData.objectiveValue || null,
-        p_end_date: challengeData.endDate ? new Date(challengeData.endDate).toISOString() : null,
-        p_team_id: challengeData.teamId || null
+        p_objective_value: challengeData.objectiveValue,
+        p_end_date: challengeData.endDate,
+        p_team_id: challengeData.teamId
       });
 
-      if (error) {
-        console.error('RPC Error:', error);
-        throw error;
-      }
-
-      console.log('Challenge created successfully:', data);
+      if (error) throw error;
 
       toast({
         title: "¡Éxito!",
         description: "Desafío personalizado creado correctamente.",
       });
 
-      // Recargar los desafíos
-      await loadChallenges();
+      loadChallenges();
       return data;
     } catch (err) {
       console.error('Error creating custom challenge:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Error desconocido';
       toast({
         title: "Error",
-        description: `No se pudo crear el desafío: ${errorMessage}`,
-        variant: "destructive",
-      });
-      throw err;
-    }
-  };
-
-  const updateChallenge = async (challengeId: string, challengeData: any) => {
-    if (!user?.id) return;
-
-    try {
-      const { error } = await supabase
-        .from('challenges')
-        .update({
-          title: challengeData.title,
-          description: challengeData.description,
-          challenge_type: challengeData.challengeType,
-          difficulty_level: challengeData.difficultyLevel,
-          target_score: challengeData.targetScore,
-          objective_type: challengeData.objectiveType,
-          objective_value: challengeData.objectiveValue,
-          end_date: challengeData.endDate ? new Date(challengeData.endDate).toISOString() : null,
-          team_id: challengeData.teamId,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', challengeId)
-        .eq('created_by', user.id);
-
-      if (error) throw error;
-
-      toast({
-        title: "¡Éxito!",
-        description: "Desafío actualizado correctamente.",
-      });
-
-      loadChallenges();
-    } catch (err) {
-      console.error('Error updating challenge:', err);
-      toast({
-        title: "Error",
-        description: "No se pudo actualizar el desafío.",
+        description: "No se pudo crear el desafío personalizado.",
         variant: "destructive",
       });
       throw err;
@@ -230,14 +159,12 @@ export const useChallenges = () => {
   };
 
   const joinChallenge = async (challengeId: string) => {
-    if (!user?.id) return;
-
     try {
       const { error } = await supabase
         .from('challenge_participants')
         .insert({
           challenge_id: challengeId,
-          participant_id: user.id,
+          participant_id: user!.id,
           participant_type: 'user'
         });
 
@@ -260,14 +187,12 @@ export const useChallenges = () => {
   };
 
   const leaveChallenge = async (challengeId: string) => {
-    if (!user?.id) return;
-
     try {
       const { error } = await supabase
         .from('challenge_participants')
         .delete()
         .eq('challenge_id', challengeId)
-        .eq('participant_id', user.id)
+        .eq('participant_id', user!.id)
         .eq('participant_type', 'user');
 
       if (error) throw error;
@@ -289,14 +214,12 @@ export const useChallenges = () => {
   };
 
   const deleteChallenge = async (challengeId: string) => {
-    if (!user?.id) return;
-
     try {
       const { error } = await supabase
         .from('challenges')
         .delete()
         .eq('id', challengeId)
-        .eq('created_by', user.id);
+        .eq('created_by', user!.id);
 
       if (error) throw error;
 
@@ -322,7 +245,6 @@ export const useChallenges = () => {
     loading,
     error,
     createCustomChallenge,
-    updateChallenge,
     joinChallenge,
     leaveChallenge,
     deleteChallenge,

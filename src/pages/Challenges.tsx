@@ -8,7 +8,6 @@ import { Trophy, Users, Target, Calendar, Filter, Plus, Trash2, Edit } from 'luc
 import { useChallenges } from '@/hooks/useChallenges';
 import ChallengeCard from '@/components/challenges/ChallengeCard';
 import CreateChallengeDialog from '@/components/challenges/CreateChallengeDialog';
-import EditChallengeDialog from '@/components/challenges/EditChallengeDialog';
 import { useAuth } from '@/hooks/useAuth';
 
 const Challenges = () => {
@@ -20,13 +19,11 @@ const Challenges = () => {
     createCustomChallenge, 
     joinChallenge, 
     leaveChallenge,
-    deleteChallenge,
-    updateChallenge
+    deleteChallenge 
   } = useChallenges();
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'individual' | 'team'>('all');
   const [createLoading, setCreateLoading] = useState(false);
-  const [editingChallenge, setEditingChallenge] = useState<any>(null);
 
   const handleJoinChallenge = async (challengeId: string) => {
     setActionLoading(challengeId);
@@ -41,11 +38,9 @@ const Challenges = () => {
   };
 
   const handleDeleteChallenge = async (challengeId: string) => {
-    if (window.confirm('¿Estás seguro de que quieres eliminar este desafío?')) {
-      setActionLoading(challengeId);
-      await deleteChallenge(challengeId);
-      setActionLoading(null);
-    }
+    setActionLoading(challengeId);
+    await deleteChallenge(challengeId);
+    setActionLoading(null);
   };
 
   const handleCreateChallenge = async (challengeData: any) => {
@@ -54,15 +49,6 @@ const Challenges = () => {
       await createCustomChallenge(challengeData);
     } finally {
       setCreateLoading(false);
-    }
-  };
-
-  const handleEditChallenge = async (challengeId: string, challengeData: any) => {
-    try {
-      await updateChallenge(challengeId, challengeData);
-      setEditingChallenge(null);
-    } catch (error) {
-      console.error('Error editing challenge:', error);
     }
   };
 
@@ -207,7 +193,6 @@ const Challenges = () => {
             <TabsTrigger value="custom">Mis Creaciones ({userCustomChallenges.length})</TabsTrigger>
           </TabsList>
 
-          {/* Tab: Disponibles */}
           <TabsContent value="available" className="space-y-6">
             {availableChallenges.length === 0 ? (
               <Card>
@@ -236,7 +221,6 @@ const Challenges = () => {
             )}
           </TabsContent>
 
-          {/* Tab: Activos */}
           <TabsContent value="active" className="space-y-6">
             {activeChallenges.length === 0 ? (
               <Card>
@@ -265,7 +249,6 @@ const Challenges = () => {
             )}
           </TabsContent>
 
-          {/* Tab: Mis Creaciones */}
           <TabsContent value="custom" className="space-y-6">
             {userCustomChallenges.length === 0 ? (
               <Card>
@@ -296,15 +279,6 @@ const Challenges = () => {
                     <div className="absolute top-2 right-2 flex space-x-1">
                       <Button
                         size="sm"
-                        variant="outline"
-                        onClick={() => setEditingChallenge(challenge)}
-                        disabled={actionLoading === challenge.id}
-                        className="h-8 w-8 p-0"
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        size="sm"
                         variant="destructive"
                         onClick={() => handleDeleteChallenge(challenge.id)}
                         disabled={actionLoading === challenge.id}
@@ -319,15 +293,6 @@ const Challenges = () => {
             )}
           </TabsContent>
         </Tabs>
-
-        {/* Dialog de edición */}
-        {editingChallenge && (
-          <EditChallengeDialog
-            challenge={editingChallenge}
-            onEditChallenge={handleEditChallenge}
-            onClose={() => setEditingChallenge(null)}
-          />
-        )}
       </div>
     </div>
   );

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,16 +10,18 @@ import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { User, Mail, Calendar, Trophy, Target, Star, Settings, Camera } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import { useUserStats } from '@/hooks/useUserStats';
+import { useAchievements } from '@/hooks/useAchievements';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 
 const Profile = () => {
   const { user } = useAuth();
+  const { stats, refreshStats } = useUserStats();
+  const { achievements } = useAchievements();
   const { toast } = useToast();
   
   const [profile, setProfile] = useState<any>(null);
-  const [stats, setStats] = useState<any>(null);
-  const [achievements, setAchievements] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState({
@@ -27,81 +30,53 @@ const Profile = () => {
   });
 
   useEffect(() => {
-    if (user?.id) {
-      loadProfileData();
-    }
+    loadProfile();
   }, [user]);
 
-  const loadProfileData = async () => {
+  const loadProfile = async () => {
     if (!user?.id) return;
 
     try {
       setLoading(true);
-      
-      // Cargar perfil usando un select más simple
-      const { data: profileData, error: profileError } = await supabase
+      const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', user.id)
-        .single();
-
-      if (profileError) {
-        console.error('Profile error:', profileError);
-        // Si no existe el perfil, intentar crearlo
-        if (profileError.code === 'PGRST116') {
-          const newProfile = {
-            id: user.id,
-            email: user.email || '',
-            full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || '',
-            avatar_url: user.user_metadata?.avatar_url || ''
-          };
-
-          const { data: insertedProfile, error: insertError } = await supabase
-            .from('profiles')
-            .insert(newProfile)
-            .select()
-            .single();
-
-          if (insertError) {
-            console.error('Insert error:', insertError);
-            throw insertError;
-          }
-
-          setProfile(insertedProfile);
-          setFormData({
-            full_name: insertedProfile.full_name || '',
-            avatar_url: insertedProfile.avatar_url || ''
-          });
-        } else {
-          throw profileError;
-        }
-      } else {
-        setProfile(profileData);
-        setFormData({
-          full_name: profileData.full_name || '',
-          avatar_url: profileData.avatar_url || ''
-        });
-      }
-
-      // Cargar estadísticas de forma más simple
-      const { data: statsData } = await supabase
-        .from('user_stats')
-        .select('*')
-        .eq('user_id', user.id)
         .maybeSingle();
 
-      setStats(statsData);
+      if (error && error.code !== 'PGRST116') {
+        throw error;
+      }
 
-      // Cargar logros de forma más simple
-      const { data: achievementsData } = await supabase
-        .from('user_achievements')
-        .select(`
-          *,
-          achievement:achievements(*)
-        `)
-        .eq('user_id', user.id);
+      if (data) {
+        setProfile(data);
+        setFormData({
+          full_name: data.full_name || '',
+          avatar_url: data.avatar_url || ''
+        });
+      } else {
+        // Crear perfil si no existe
+        const newProfile = {
+          id: user.id,
+          email: user.email || '',
+          full_name: user.user_metadata?.full_name || '',
+          avatar_url: user.user_metadata?.avatar_url || ''
+        };
 
-      setAchievements(achievementsData || []);
+        const { data: insertedProfile, error: insertError } = await supabase
+          .from('profiles')
+          .insert(newProfile)
+          .select()
+          .single();
+
+        if (insertError) throw insertError;
+
+        setProfile(insertedProfile);
+        setFormData({
+          full_name: insertedProfile.full_name || '',
+          avatar_url: insertedProfile.avatar_url || ''
+        });
+      }
     } catch (error) {
       console.error('Error loading profile:', error);
       toast({
@@ -119,29 +94,23 @@ const Profile = () => {
 
     try {
       setSaving(true);
-      
-      // Actualizar usando upsert para evitar problemas de permisos
       const { error } = await supabase
         .from('profiles')
-        .upsert({
-          id: user.id,
-          email: user.email || '',
+        .update({
           full_name: formData.full_name,
           avatar_url: formData.avatar_url,
           updated_at: new Date().toISOString()
-        });
+        })
+        .eq('id', user.id);
 
-      if (error) {
-        console.error('Update error:', error);
-        throw error;
-      }
+      if (error) throw error;
 
       toast({
         title: "Perfil actualizado",
         description: "Tus cambios han sido guardados correctamente",
       });
 
-      await loadProfileData();
+      loadProfile(); // Recargar para mostrar cambios
     } catch (error) {
       console.error('Error updating profile:', error);
       toast({
@@ -334,6 +303,12 @@ const Profile = () => {
                       <span className="text-sm text-gray-600">Racha actual</span>
                       <span className="font-medium">{stats?.current_streak || 0} días</span>
                     </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-gray-600">XP por logros</span>
+                      <span className="font-medium">
+                        {earnedAchievements.reduce((sum, ua) => sum + (ua.achievement.xp_reward || 0), 0)} XP
+                      </span>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -349,7 +324,7 @@ const Profile = () => {
                     <Star className="h-5 w-5 mr-2" />
                     Logros Desbloqueados
                   </div>
-                  <Badge variant="outline">{earnedAchievements.length}</Badge>
+                  <Badge variant="outline">{earnedAchievements.length} de {achievements.length}</Badge>
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -374,13 +349,13 @@ const Profile = () => {
                           <Trophy className="h-6 w-6 text-white" />
                         </div>
                         <div className="flex-1">
-                          <h4 className="font-medium">{userAchievement.achievement?.title}</h4>
+                          <h4 className="font-medium">{userAchievement.achievement.title}</h4>
                           <p className="text-sm text-gray-600">
-                            {userAchievement.achievement?.description}
+                            {userAchievement.achievement.description}
                           </p>
                           <div className="flex items-center space-x-2 mt-1">
                             <Badge variant="secondary" className="text-xs">
-                              +{userAchievement.achievement?.xp_reward || 0} XP
+                              +{userAchievement.achievement.xp_reward || 0} XP
                             </Badge>
                             <span className="text-xs text-gray-500">
                               {userAchievement.earned_at ? 
