@@ -6,6 +6,7 @@ import { Mic, MicOff, Volume2, VolumeX, Phone, PhoneOff, Pause, Play } from 'luc
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import ConversationTranscript from './ConversationTranscript';
+import ChatInterface from './ChatInterface';
 import RealTimeEvaluation from './RealTimeEvaluation';
 import { useSessionManager } from './SessionManager';
 
@@ -54,8 +55,6 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
 
   const { toast } = useToast();
   const sessionManager = useSessionManager();
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
   const sessionStartRef = useRef<Date | null>(null);
   const recognitionRef = useRef<any>(null);
   const pauseStartRef = useRef<Date | null>(null);
@@ -82,7 +81,6 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
     }
   }, [isActive, isPaused]);
 
-  // Configurar reconocimiento de voz continuo
   useEffect(() => {
     if ('webkitSpeechRecognition' in window) {
       recognitionRef.current = new (window as any).webkitSpeechRecognition();
@@ -117,7 +115,6 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
   }, []);
 
   const initializeSession = async () => {
-    // Crear sesión en la base de datos
     const newSessionId = await sessionManager.startSession(config);
     if (newSessionId) {
       setSessionId(newSessionId);
@@ -125,14 +122,12 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
 
     if (config.interactionMode === 'call') {
       setCallStatus('ringing');
-      
       setTimeout(() => {
         setCallStatus('connected');
         toast({
           title: "Llamada conectada",
           description: "El cliente virtual está en línea",
         });
-        
         setTimeout(() => {
           sendInitialGreeting();
         }, 1000);
@@ -167,14 +162,7 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
       };
 
       setMessages([aiMessage]);
-
-      // Guardar mensaje en la base de datos
-      await sessionManager.saveMessage(
-        data.response, 
-        'ai', 
-        sessionTime,
-        undefined
-      );
+      await sessionManager.saveMessage(data.response, 'ai', sessionTime, undefined);
 
       if (audioEnabled && config.interactionMode === 'call') {
         await generateAndPlayAudio(data.response, data.voice);
@@ -182,7 +170,6 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
         setIsSpeaking(false);
       }
 
-      // Iniciar reconocimiento de voz continuo
       if (config.interactionMode === 'call' && recognitionRef.current) {
         recognitionRef.current.start();
         setIsListening(true);
@@ -228,10 +215,7 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
     };
 
     setMessages(prev => [...prev, userMessage]);
-
-    // Guardar mensaje del usuario
     await sessionManager.saveMessage(content, 'user', sessionTime);
-
     setIsSpeaking(true);
 
     try {
@@ -254,11 +238,7 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
       };
 
       setMessages(prev => [...prev, aiMessage]);
-
-      // Guardar mensaje de la IA
       await sessionManager.saveMessage(data.response, 'ai', sessionTime);
-
-      // Actualizar métricas en tiempo real
       updateRealTimeMetrics(content, data.response);
 
       if (audioEnabled && config.interactionMode === 'call') {
@@ -288,18 +268,11 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
     };
 
     setRealTimeMetrics(newMetrics);
-
-    // Guardar métricas en la base de datos
     await sessionManager.saveRealTimeMetric('overall_score', newMetrics.overallScore);
-    await sessionManager.saveRealTimeMetric('rapport', newMetrics.rapport);
-    await sessionManager.saveRealTimeMetric('clarity', newMetrics.clarity);
-    await sessionManager.saveRealTimeMetric('empathy', newMetrics.empathy);
-    await sessionManager.saveRealTimeMetric('accuracy', newMetrics.accuracy);
   };
 
   const togglePause = () => {
     if (isPaused) {
-      // Reanudar
       if (pauseStartRef.current) {
         totalPauseTimeRef.current += Math.floor((Date.now() - pauseStartRef.current.getTime()) / 1000);
         pauseStartRef.current = null;
@@ -316,7 +289,6 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
         description: "La conversación continúa",
       });
     } else {
-      // Pausar
       pauseStartRef.current = new Date();
       
       if (recognitionRef.current) {
@@ -384,43 +356,10 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
         sessionDuration: sessionTime
       };
 
-      // Guardar evaluación y finalizar sesión
       await sessionManager.endSession(evaluation);
-      
       onComplete(evaluation);
     } catch (error) {
       console.error('Error evaluating session:', error);
-    }
-  };
-
-  const requestFeedback = async () => {
-    try {
-      const recentMessages = messages.slice(-4);
-      const { data, error } = await supabase.functions.invoke('ai-conversation', {
-        body: {
-          message: "Dame feedback sobre mi desempeño hasta ahora",
-          scenario: config.scenario,
-          conversationHistory: recentMessages,
-          requestType: 'feedback'
-        },
-      });
-
-      if (error) throw error;
-
-      const feedbackMessage = {
-        id: Date.now().toString(),
-        content: `[FEEDBACK] ${data.response}`,
-        sender: 'ai',
-        timestamp: new Date(),
-      };
-
-      setMessages(prev => [...prev, feedbackMessage]);
-
-      if (audioEnabled && config.interactionMode === 'call') {
-        await generateAndPlayAudio(data.response, data.voice);
-      }
-    } catch (error) {
-      console.error('Error requesting feedback:', error);
     }
   };
 
@@ -465,7 +404,7 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[700px]">
       {/* Área principal de conversación */}
       <div className="lg:col-span-2 space-y-4">
-        {/* Header de sesión mejorado */}
+        {/* Header de sesión */}
         <div className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-lg shadow">
           <div className="flex items-center space-x-4">
             <Badge className={`${
@@ -551,7 +490,7 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
                     </div>
                   </div>
 
-                  {/* Animación de ondas de audio mejorada */}
+                  {/* Animación de ondas de audio */}
                   <div className="flex items-center justify-center space-x-1">
                     {[...Array(5)].map((_, i) => (
                       <div
@@ -566,27 +505,15 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
                       />
                     ))}
                   </div>
-
-                  {!isPaused && (
-                    <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg text-center max-w-md">
-                      <div className="text-blue-600 dark:text-blue-400 text-sm mb-2">
-                        💡 Comandos útiles:
-                      </div>
-                      <div className="text-xs text-blue-700 dark:text-blue-300 space-y-1">
-                        <div>• "Dame feedback" - Para recibir evaluación intermedia</div>
-                        <div>• "¿Cómo lo estoy haciendo?" - Para conocer tu progreso</div>
-                        <div>• "Terminemos aquí" - Para finalizar la sesión</div>
-                      </div>
-                    </div>
-                  )}
                 </div>
               </CardContent>
             </Card>
           ) : (
-            <ConversationTranscript
+            <ChatInterface
               messages={messages}
-              isListening={isListening}
-              currentUserText={currentUserText}
+              onSendMessage={handleUserMessage}
+              isLoading={isSpeaking}
+              disabled={isPaused}
             />
           )}
         </div>
@@ -594,15 +521,13 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
 
       {/* Panel lateral */}
       <div className="space-y-4">
-        {/* Evaluación en tiempo real */}
         <RealTimeEvaluation
           metrics={realTimeMetrics}
           isActive={isActive && !isPaused}
           sessionDuration={sessionTime}
-          onRequestFeedback={requestFeedback}
+          onRequestFeedback={() => {}}
         />
 
-        {/* Transcripción (solo en modo llamada) */}
         {config.interactionMode === 'call' && (
           <div className="h-[300px]">
             <ConversationTranscript
