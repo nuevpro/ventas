@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Mic, MicOff, Volume2, VolumeX, Send, RotateCcw, User, Bot } from 'lucide-react';
+import { Mic, MicOff, Volume2, VolumeX, Send, RotateCcw, User, Bot, Phone, PhoneOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -27,23 +27,34 @@ const ConversationTraining = ({ scenario, difficulty, onComplete }: Conversation
   const [isRecording, setIsRecording] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [audioEnabled, setAudioEnabled] = useState(true);
+  const [autoCallMode, setAutoCallMode] = useState(true);
+  const [callActive, setCallActive] = useState(false);
   const [clientPersonality, setClientPersonality] = useState('');
   const [knowledgeBase, setKnowledgeBase] = useState([]);
+  const [sessionMetrics, setSessionMetrics] = useState({
+    startTime: null as Date | null,
+    wordsSpoken: 0,
+    interruptionCount: 0,
+    keywordsUsed: new Set(),
+    emotionalTone: 'neutral'
+  });
   const { toast } = useToast();
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const callSoundRef = useRef<HTMLAudioElement | null>(null);
 
-  // Scroll to bottom when new messages are added
+  // Auto-scroll to bottom when new messages are added
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Load knowledge base and initialize conversation
+  // Load knowledge base and ElevenLabs config
   useEffect(() => {
     loadKnowledgeBase();
-    initializeConversation();
+    loadElevenLabsConfig();
+    createCallSound();
   }, [scenario, difficulty]);
 
   const loadKnowledgeBase = () => {
@@ -54,17 +65,211 @@ const ConversationTraining = ({ scenario, difficulty, onComplete }: Conversation
     }
   };
 
+  const loadElevenLabsConfig = () => {
+    const savedConfig = localStorage.getItem('elevenLabsConfig');
+    if (savedConfig) {
+      const config = JSON.parse(savedConfig);
+      setAutoCallMode(config.autoCallMode || true);
+    }
+  };
+
+  const createCallSound = () => {
+    // Create a simple call ringing sound using Web Audio API
+    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    
+    const createRingTone = () => {
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+      oscillator.frequency.setValueAtTime(600, audioContext.currentTime + 0.5);
+      
+      gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 1);
+      
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(audioContext.currentTime + 1);
+    };
+    
+    callSoundRef.current = { play: createRingTone } as any;
+  };
+
+  const initiateCall = async () => {
+    setCallActive(true);
+    setSessionMetrics(prev => ({ ...prev, startTime: new Date() }));
+    
+    // Play call sound
+    if (callSoundRef.current) {
+      callSoundRef.current.play();
+    }
+    
+    toast({
+      title: "Iniciando llamada...",
+      description: "Conectando con el cliente",
+    });
+
+    // Wait a moment then start the conversation
+    setTimeout(() => {
+      initializeConversation();
+      toast({
+        title: "Llamada conectada",
+        description: "El cliente está en línea",
+      });
+    }, 3000);
+  };
+
+  const endCall = async () => {
+    setCallActive(false);
+    
+    if (messages.length >= 4) {
+      await evaluateConversation();
+    }
+    
+    // Save session to history
+    saveSessionToHistory();
+    
+    toast({
+      title: "Llamada finalizada",
+      description: "Sesión guardada en el historial",
+    });
+  };
+
+  const saveSessionToHistory = () => {
+    const elevenLabsConfig = JSON.parse(localStorage.getItem('elevenLabsConfig') || '{}');
+    const voiceUsed = elevenLabsConfig.defaultVoice || 'EXAVITQu4vr4xnSDxMaL';
+    
+    const session = {
+      id: Date.now().toString(),
+      title: `${scenario} - ${new Date().toLocaleDateString()}`,
+      scenario,
+      type: autoCallMode ? 'call_simulation' : 'conversation',
+      date: new Date().toISOString().split('T')[0],
+      duration: calculateDuration(),
+      score: calculateScore(),
+      voice: {
+        name: getVoiceName(voiceUsed),
+        language: 'english',
+        gender: getVoiceGender(voiceUsed),
+        age: 'middle'
+      },
+      client: {
+        name: getClientName(),
+        personality: clientPersonality,
+        objections: getScenarioObjections()
+      },
+      metrics: {
+        wordsPerMinute: calculateWPM(),
+        interruptionCount: sessionMetrics.interruptionCount,
+        emotionalTone: sessionMetrics.emotionalTone,
+        keywordsUsed: Array.from(sessionMetrics.keywordsUsed),
+        clientSatisfaction: Math.random() * 3 + 7 // Mock satisfaction score
+      },
+      transcript: {
+        messages: messages.map(m => ({
+          speaker: m.sender,
+          content: m.content,
+          timestamp: m.timestamp.toLocaleTimeString(),
+          audioUrl: m.audioUrl
+        }))
+      },
+      evaluation: {
+        strengths: ['Buena comunicación', 'Manejo profesional'],
+        improvements: ['Mejorar el cierre', 'Más preguntas abiertas'],
+        overallRating: calculateScore() / 10,
+        specificFeedback: 'Sesión completada exitosamente.'
+      },
+      tags: [scenario.split('-')[0], difficulty],
+      isStarred: false
+    };
+
+    const existingSessions = JSON.parse(localStorage.getItem('trainingSessions') || '[]');
+    const updatedSessions = [session, ...existingSessions];
+    localStorage.setItem('trainingSessions', JSON.stringify(updatedSessions));
+  };
+
+  const calculateDuration = () => {
+    if (!sessionMetrics.startTime) return '00:00';
+    const duration = Math.floor((Date.now() - sessionMetrics.startTime.getTime()) / 1000);
+    const minutes = Math.floor(duration / 60);
+    const seconds = duration % 60;
+    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  const calculateScore = () => {
+    const baseScore = 60;
+    const messageBonus = Math.min(messages.length * 5, 30);
+    const interruptionPenalty = sessionMetrics.interruptionCount * 5;
+    const keywordBonus = Math.min(sessionMetrics.keywordsUsed.size * 2, 15);
+    
+    return Math.max(0, Math.min(100, baseScore + messageBonus - interruptionPenalty + keywordBonus));
+  };
+
+  const calculateWPM = () => {
+    const userMessages = messages.filter(m => m.sender === 'user');
+    const totalWords = userMessages.reduce((acc, m) => acc + m.content.split(' ').length, 0);
+    const durationMinutes = sessionMetrics.startTime 
+      ? (Date.now() - sessionMetrics.startTime.getTime()) / 60000 
+      : 1;
+    return Math.round(totalWords / durationMinutes);
+  };
+
+  const getVoiceName = (voiceId: string) => {
+    const voiceMap = {
+      'EXAVITQu4vr4xnSDxMaL': 'Sarah',
+      'JBFqnCBsd6RMkjVDRZzb': 'George',
+      'XB0fDUnXU5powFXDhCwa': 'Charlotte',
+      'onwK4e9ZLuTAKqWW03F9': 'Daniel'
+    };
+    return voiceMap[voiceId] || 'Sarah';
+  };
+
+  const getVoiceGender = (voiceId: string) => {
+    const genderMap = {
+      'EXAVITQu4vr4xnSDxMaL': 'female',
+      'JBFqnCBsd6RMkjVDRZzb': 'male',
+      'XB0fDUnXU5powFXDhCwa': 'female',
+      'onwK4e9ZLuTAKqWW03F9': 'male'
+    };
+    return genderMap[voiceId] || 'female';
+  };
+
+  const getClientName = () => {
+    const names = {
+      'sales-cold-call': 'George Thompson',
+      'sales-objection-handling': 'Maria Rodriguez',
+      'recruitment-interview': 'Charlotte Williams',
+      'education-presentation': 'Dr. Johnson'
+    };
+    return names[scenario] || 'Cliente';
+  };
+
+  const getScenarioObjections = () => {
+    const objections = {
+      'sales-cold-call': ['No tengo tiempo', 'Ya tengo proveedor', 'No me interesa'],
+      'sales-objection-handling': ['Es muy caro', 'No tenemos presupuesto', 'Necesitamos más tiempo'],
+      'recruitment-interview': ['Experiencia técnica', 'Trabajo en equipo', 'Liderazgo'],
+      'education-presentation': ['Conceptos complejos', 'Ejemplos prácticos', 'Aplicación real']
+    };
+    return objections[scenario] || [];
+  };
+
   const initializeConversation = async () => {
+    const elevenLabsConfig = JSON.parse(localStorage.getItem('elevenLabsConfig') || '{}');
+    
     const greetingMessages = {
-      'sales-cold-call': '¡Hola! Habla María González de Tecnologías Avanzadas. ¿Tengo unos minutos de su tiempo?',
+      'sales-cold-call': elevenLabsConfig.callIntroMessage?.replace('{name}', getClientName()) || 
+        `¡Hola! Habla ${getClientName()}. ¿Tengo unos minutos de su tiempo?`,
       'sales-objection-handling': 'Buenos días, ya me presentaron su propuesta pero tengo algunas dudas sobre los costos...',
-      'recruitment-interview': 'Buenos días, soy el gerente de RRHH. Gracias por venir a esta entrevista. Cuénteme sobre usted.',
+      'recruitment-interview': `Buenos días, soy ${getClientName()}, gerente de RRHH. Gracias por venir a esta entrevista.`,
       'education-presentation': 'Buenos días, somos sus estudiantes de hoy. Estamos listos para su presentación.'
     };
 
     const personalities = {
       'sales-cold-call': 'Cliente ocupado y inicialmente escéptico',
-      'sales-objection-handling': 'Cliente con preocupaciones sobre costos',
+      'sales-objection-handling': 'Cliente con preocupaciones específicas sobre costos',
       'recruitment-interview': 'Entrevistador profesional evaluando competencias',
       'education-presentation': 'Audiencia atenta esperando aprender'
     };
@@ -83,20 +288,16 @@ const ConversationTraining = ({ scenario, difficulty, onComplete }: Conversation
     // Generate audio for greeting if enabled
     if (audioEnabled) {
       try {
-        // Get ElevenLabs configuration
-        const elevenLabsConfig = localStorage.getItem('elevenLabsConfig');
-        const config = elevenLabsConfig ? JSON.parse(elevenLabsConfig) : {};
-
         const audioResponse = await supabase.functions.invoke('text-to-speech', {
           body: { 
             text: greeting, 
-            voice: 'Sarah',
-            model: config.defaultModel || 'eleven_multilingual_v2',
-            settings: config.stability ? {
-              stability: config.stability,
-              similarity_boost: config.similarityBoost,
-              style: config.style,
-              use_speaker_boost: config.useSpeakerBoost
+            voice: getVoiceName(elevenLabsConfig.defaultVoice || 'EXAVITQu4vr4xnSDxMaL'),
+            model: elevenLabsConfig.defaultModel || 'eleven_multilingual_v2',
+            settings: elevenLabsConfig.stability ? {
+              stability: elevenLabsConfig.stability,
+              similarity_boost: elevenLabsConfig.similarityBoost,
+              style: elevenLabsConfig.style,
+              use_speaker_boost: elevenLabsConfig.useSpeakerBoost
             } : undefined
           },
         });
@@ -109,7 +310,7 @@ const ConversationTraining = ({ scenario, difficulty, onComplete }: Conversation
           setTimeout(() => {
             const audio = new Audio(audioUrl);
             audio.play().catch(console.error);
-          }, 500);
+          }, 1000);
         }
       } catch (error) {
         console.error('Error generating greeting audio:', error);
@@ -184,6 +385,17 @@ const ConversationTraining = ({ scenario, difficulty, onComplete }: Conversation
   const sendMessage = async (content: string) => {
     if (!content.trim()) return;
 
+    // Update metrics
+    const words = content.split(' ').length;
+    const keywords = ['beneficio', 'solución', 'precio', 'calidad', 'experiencia', 'proyecto'];
+    const foundKeywords = keywords.filter(keyword => content.toLowerCase().includes(keyword));
+    
+    setSessionMetrics(prev => ({
+      ...prev,
+      wordsSpoken: prev.wordsSpoken + words,
+      keywordsUsed: new Set([...prev.keywordsUsed, ...foundKeywords])
+    }));
+
     const userMessage: Message = {
       id: Date.now().toString(),
       content,
@@ -196,15 +408,14 @@ const ConversationTraining = ({ scenario, difficulty, onComplete }: Conversation
     setIsLoading(true);
 
     try {
-      // Send to AI conversation function with conversation history and knowledge base
       const { data, error } = await supabase.functions.invoke('ai-conversation', {
         body: {
           message: content,
           scenario,
           userProfile: 'trainee',
           difficulty,
-          conversationHistory: messages.slice(-5), // Send last 5 messages for context
-          knowledgeBase: knowledgeBase, // Include knowledge base
+          conversationHistory: messages.slice(-5),
+          knowledgeBase: knowledgeBase,
         },
       });
 
@@ -220,20 +431,18 @@ const ConversationTraining = ({ scenario, difficulty, onComplete }: Conversation
       // Generate audio with the specified voice and custom settings
       if (audioEnabled && data.voice) {
         try {
-          // Get ElevenLabs configuration
-          const elevenLabsConfig = localStorage.getItem('elevenLabsConfig');
-          const config = elevenLabsConfig ? JSON.parse(elevenLabsConfig) : {};
+          const elevenLabsConfig = JSON.parse(localStorage.getItem('elevenLabsConfig') || '{}');
 
           const audioResponse = await supabase.functions.invoke('text-to-speech', {
             body: { 
               text: data.response, 
               voice: data.voice,
-              model: config.defaultModel || 'eleven_multilingual_v2',
-              settings: config.stability ? {
-                stability: config.stability,
-                similarity_boost: config.similarityBoost,
-                style: config.style,
-                use_speaker_boost: config.useSpeakerBoost
+              model: elevenLabsConfig.defaultModel || 'eleven_multilingual_v2',
+              settings: elevenLabsConfig.stability ? {
+                stability: elevenLabsConfig.stability,
+                similarity_boost: elevenLabsConfig.similarityBoost,
+                style: elevenLabsConfig.style,
+                use_speaker_boost: elevenLabsConfig.useSpeakerBoost
               } : undefined
             },
           });
@@ -242,7 +451,6 @@ const ConversationTraining = ({ scenario, difficulty, onComplete }: Conversation
             const audioUrl = `data:audio/mpeg;base64,${audioResponse.data.audioContent}`;
             aiMessage.audioUrl = audioUrl;
             
-            // Auto-play audio after a short delay
             setTimeout(() => {
               const audio = new Audio(audioUrl);
               audio.play().catch(console.error);
@@ -296,7 +504,14 @@ const ConversationTraining = ({ scenario, difficulty, onComplete }: Conversation
   const resetConversation = () => {
     setMessages([]);
     setInputText('');
-    initializeConversation();
+    setCallActive(false);
+    setSessionMetrics({
+      startTime: null,
+      wordsSpoken: 0,
+      interruptionCount: 0,
+      keywordsUsed: new Set(),
+      emotionalTone: 'neutral'
+    });
   };
 
   const getDifficultyColor = () => {
@@ -313,7 +528,9 @@ const ConversationTraining = ({ scenario, difficulty, onComplete }: Conversation
       <CardHeader>
         <CardTitle className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <span>Simulación: {scenario}</span>
+            <span>
+              {autoCallMode ? '📞 Llamada Simulada' : '💬 Conversación'}: {scenario}
+            </span>
             <Badge className={getDifficultyColor()}>
               {difficulty}
             </Badge>
@@ -322,8 +539,24 @@ const ConversationTraining = ({ scenario, difficulty, onComplete }: Conversation
                 {knowledgeBase.length} docs disponibles
               </Badge>
             )}
+            {callActive && (
+              <Badge className="bg-green-100 text-green-700 animate-pulse">
+                🔴 EN VIVO
+              </Badge>
+            )}
           </div>
           <div className="flex space-x-2">
+            {!callActive ? (
+              <Button onClick={initiateCall} className="bg-green-600 hover:bg-green-700">
+                <Phone className="h-4 w-4 mr-2" />
+                Iniciar Llamada
+              </Button>
+            ) : (
+              <Button onClick={endCall} variant="destructive">
+                <PhoneOff className="h-4 w-4 mr-2" />
+                Finalizar
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"
@@ -336,18 +569,23 @@ const ConversationTraining = ({ scenario, difficulty, onComplete }: Conversation
             </Button>
           </div>
         </CardTitle>
-        <div className="text-sm text-gray-600 dark:text-gray-400">
-          <strong>Personaje:</strong> {clientPersonality}
-        </div>
+        {callActive && (
+          <div className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
+            <div><strong>Cliente:</strong> {getClientName()}</div>
+            <div><strong>Personalidad:</strong> {clientPersonality}</div>
+            <div><strong>Duración:</strong> {calculateDuration()}</div>
+            <div><strong>Palabras/min:</strong> {calculateWPM()}</div>
+          </div>
+        )}
       </CardHeader>
       
       <CardContent className="flex-1 flex flex-col">
         {/* Messages Area */}
         <div className="flex-1 overflow-y-auto space-y-4 mb-4 p-4 border rounded-lg bg-gray-50 dark:bg-gray-900">
-          {messages.length === 0 && (
+          {!callActive && messages.length === 0 && (
             <div className="text-center text-gray-500 py-8">
-              <Bot className="h-12 w-12 mx-auto mb-2 opacity-50" />
-              <p>La conversación comenzará automáticamente...</p>
+              <Phone className="h-12 w-12 mx-auto mb-2 opacity-50" />
+              <p>Presiona "Iniciar Llamada" para comenzar la simulación</p>
             </div>
           )}
           
@@ -370,7 +608,7 @@ const ConversationTraining = ({ scenario, difficulty, onComplete }: Conversation
                     <Bot className="h-4 w-4 mr-2" />
                   )}
                   <span className="text-xs font-medium">
-                    {message.sender === 'user' ? 'Usted' : 'Cliente/IA'}
+                    {message.sender === 'user' ? 'Usted' : getClientName()}
                   </span>
                 </div>
                 <p className="text-sm">{message.content}</p>
@@ -403,47 +641,40 @@ const ConversationTraining = ({ scenario, difficulty, onComplete }: Conversation
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Input Area */}
-        <div className="space-y-3">
-          <div className="flex space-x-2">
-            <Input
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              placeholder="Escriba su respuesta..."
-              onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && sendMessage(inputText)}
-              disabled={isLoading}
-              className="flex-1"
-            />
-            
-            <Button
-              variant={isRecording ? "destructive" : "outline"}
-              size="icon"
-              onClick={isRecording ? stopRecording : startRecording}
-              disabled={isLoading}
-              title={isRecording ? "Detener grabación" : "Grabar mensaje de voz"}
-            >
-              {isRecording ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-            </Button>
-            
-            <Button
-              onClick={() => sendMessage(inputText)}
-              disabled={!inputText.trim() || isLoading}
-              title="Enviar mensaje"
-            >
-              <Send className="h-4 w-4" />
-            </Button>
-          </div>
+        {/* Input Area - Only show if call is active */}
+        {callActive && (
+          <div className="space-y-3">
+            <div className="flex space-x-2">
+              <Input
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                placeholder="Escriba su respuesta..."
+                onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && sendMessage(inputText)}
+                disabled={isLoading}
+                className="flex-1"
+              />
+              
+              <Button
+                onClick={() => sendMessage(inputText)}
+                disabled={!inputText.trim() || isLoading}
+                title="Enviar mensaje"
+              >
+                <Send className="h-4 w-4" />
+              </Button>
+            </div>
 
-          {messages.length >= 4 && (
-            <Button
-              className="w-full"
-              onClick={evaluateConversation}
-              disabled={isLoading}
-            >
-              Finalizar y Evaluar Conversación
-            </Button>
-          )}
-        </div>
+            {messages.length >= 4 && (
+              <Button
+                className="w-full"
+                onClick={endCall}
+                variant="destructive"
+              >
+                <PhoneOff className="h-4 w-4 mr-2" />
+                Finalizar Llamada y Evaluar
+              </Button>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
