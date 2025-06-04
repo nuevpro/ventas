@@ -1,169 +1,232 @@
 
 import React from 'react';
-import { Clock, Target, Trophy, BookOpen, TrendingUp, Star } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 import StatCard from '@/components/StatCard';
-import ProgressBar from '@/components/ProgressBar';
+import { 
+  Target, 
+  TrendingUp, 
+  Clock, 
+  Award,
+  Play,
+  Calendar,
+  Users,
+  BarChart3
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 const Dashboard = () => {
-  const recentSessions = [
-    { 
-      title: 'Bienvenida al Cliente - Escenario 1', 
-      level: 'Nivel 1: Bienvenida al Cliente',
-      date: '6/4/2025',
-      duration: '0 min',
-      score: 0 
+  const { user } = useAuth();
+
+  const { data: userStats } = useQuery({
+    queryKey: ['userStats', user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('user_stats')
+        .select('*')
+        .eq('user_id', user?.id)
+        .single();
+      
+      if (error) throw error;
+      return data;
     },
-    { 
-      title: 'Bienvenida al Cliente - Escenario 1', 
-      level: 'Nivel 1: Bienvenida al Cliente',
-      date: '6/3/2025',
-      duration: '7 min',
-      score: 63 
+    enabled: !!user?.id
+  });
+
+  const { data: recentSessions } = useQuery({
+    queryKey: ['recentSessions', user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('training_sessions')
+        .select(`
+          *,
+          scenarios (
+            title,
+            difficulty_level
+          )
+        `)
+        .eq('user_id', user?.id)
+        .order('created_at', { ascending: false })
+        .limit(5);
+      
+      if (error) throw error;
+      return data;
     },
-    { 
-      title: 'Bienvenida al Cliente - Escenario 1', 
-      level: 'Nivel 1: Bienvenida al Cliente',
-      date: '5/30/2025',
-      duration: '0 min',
-      score: 0 
+    enabled: !!user?.id
+  });
+
+  const { data: achievements } = useQuery({
+    queryKey: ['userAchievements', user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('user_achievements')
+        .select(`
+          *,
+          achievements (
+            title,
+            description,
+            icon
+          )
+        `)
+        .eq('user_id', user?.id)
+        .order('earned_at', { ascending: false })
+        .limit(3);
+      
+      if (error) throw error;
+      return data;
     },
-  ];
+    enabled: !!user?.id
+  });
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen">
+    <div className="p-6 bg-gray-50 dark:bg-gray-900 min-h-screen">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-gray-600 mt-2">Bienvenido de vuelta, HS álvarez</p>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
+          <p className="text-gray-600 dark:text-gray-400 mt-2">
+            Bienvenido de vuelta, {user?.user_metadata?.full_name || user?.email}
+          </p>
         </div>
 
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <StatCard
-            title="Total de sesiones"
-            value="6"
-            icon={BookOpen}
+            title="Nivel Actual"
+            value={userStats?.level || 1}
+            subtitle={`${userStats?.total_xp || 0} XP`}
+            icon={Target}
             color="purple"
           />
           <StatCard
-            title="Puntuación media"
-            value="36%"
-            icon={Target}
-            color="blue"
-          />
-          <StatCard
-            title="Mejor puntuación"
-            value="63%"
+            title="Puntuación Media"
+            value={`${userStats?.average_score || 0}%`}
+            subtitle="Última semana"
             icon={TrendingUp}
             color="green"
           />
           <StatCard
-            title="Tiempo total"
-            value="0 h 21 min"
+            title="Tiempo Total"
+            value={`${userStats?.total_time_minutes || 0}m`}
+            subtitle="En entrenamientos"
             icon={Clock}
+            color="blue"
+          />
+          <StatCard
+            title="Sesiones"
+            value={userStats?.total_sessions || 0}
+            subtitle="Completadas"
+            icon={Award}
             color="orange"
           />
         </div>
 
-        {/* Main Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Progress Section */}
+          {/* Quick Actions */}
           <div className="lg:col-span-2">
-            <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 mb-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Tu progreso</h3>
-              
-              <div className="space-y-4">
-                <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-sm font-medium text-gray-700">Progreso del nivel</span>
-                    <span className="text-sm text-gray-500">10%</span>
-                  </div>
-                  <ProgressBar progress={10} />
-                  <p className="text-xs text-gray-500 mt-1">0/3 escenarios completados</p>
-                </div>
-
-                <div className="pt-4 border-t border-gray-200">
-                  <h4 className="font-medium text-gray-900 mb-3">Estadísticas</h4>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-sm text-gray-600">Intentos</p>
-                      <p className="text-xl font-bold text-gray-900">6</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600">Mejor puntuación</p>
-                      <p className="text-xl font-bold text-gray-900">63%</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600">XP ganado</p>
-                      <p className="text-xl font-bold text-gray-900">0</p>
-                    </div>
-                  </div>
-                </div>
+            <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-gray-700 mb-6">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Acciones Rápidas</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Button className="bg-purple-600 hover:bg-purple-700 text-white h-12">
+                  <Play className="mr-2 h-5 w-5" />
+                  Iniciar Entrenamiento
+                </Button>
+                <Button variant="outline" className="h-12 dark:border-gray-600">
+                  <Calendar className="mr-2 h-5 w-5" />
+                  Ver Calendario
+                </Button>
+                <Button variant="outline" className="h-12 dark:border-gray-600">
+                  <Users className="mr-2 h-5 w-5" />
+                  Unirse a Desafío
+                </Button>
+                <Button variant="outline" className="h-12 dark:border-gray-600">
+                  <BarChart3 className="mr-2 h-5 w-5" />
+                  Ver Progreso
+                </Button>
               </div>
             </div>
 
             {/* Recent Sessions */}
-            <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Sesiones recientes</h3>
-              <div className="space-y-3">
-                {recentSessions.map((session, index) => (
-                  <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                    <div className="flex-1">
-                      <h4 className="font-medium text-gray-900">{session.title}</h4>
-                      <p className="text-sm text-gray-600">{session.level}</p>
-                      <div className="flex items-center space-x-4 mt-1">
-                        <span className="text-xs text-gray-500">{session.date}</span>
-                        <span className="text-xs text-gray-500">{session.duration}</span>
+            <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-gray-700">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Sesiones Recientes</h2>
+              {recentSessions && recentSessions.length > 0 ? (
+                <div className="space-y-3">
+                  {recentSessions.map((session) => (
+                    <div key={session.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                      <div>
+                        <p className="font-medium text-gray-900 dark:text-white">
+                          {session.scenarios?.title || 'Sesión de entrenamiento'}
+                        </p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                          {new Date(session.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-semibold text-gray-900 dark:text-white">{session.score}%</p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">{session.duration_minutes}m</p>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <span className={`text-lg font-bold ${session.score === 0 ? 'text-gray-400' : 'text-purple-600'}`}>
-                        {session.score}%
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <Play className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-500 dark:text-gray-400">No hay sesiones recientes</p>
+                  <p className="text-sm text-gray-400 dark:text-gray-500">¡Inicia tu primer entrenamiento!</p>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Sidebar Content */}
+          {/* Achievements & Progress */}
           <div className="space-y-6">
-            {/* Level Progress */}
-            <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Nivel Actual</h3>
-              <div className="text-center">
-                <div className="w-20 h-20 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                  <Star className="h-8 w-8 text-purple-600" />
+            {/* Recent Achievements */}
+            <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-gray-700">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Logros Recientes</h2>
+              {achievements && achievements.length > 0 ? (
+                <div className="space-y-3">
+                  {achievements.map((achievement) => (
+                    <div key={achievement.id} className="flex items-center space-x-3">
+                      <div className="text-2xl">{achievement.achievements?.icon}</div>
+                      <div>
+                        <p className="font-medium text-gray-900 dark:text-white text-sm">
+                          {achievement.achievements?.title}
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          {new Date(achievement.earned_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <h4 className="font-semibold text-gray-900">Nivel 1: Novato</h4>
-                <p className="text-sm text-gray-600 mt-1">0 XP</p>
-                <ProgressBar progress={0} className="mt-3" />
-                <p className="text-xs text-gray-500 mt-1">100 XP para siguiente nivel</p>
-              </div>
+              ) : (
+                <div className="text-center py-4">
+                  <Award className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                  <p className="text-sm text-gray-500 dark:text-gray-400">No hay logros aún</p>
+                </div>
+              )}
             </div>
 
-            {/* Quick Actions */}
-            <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Acciones rápidas</h3>
-              <div className="space-y-3">
-                <button className="w-full bg-purple-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-purple-700 transition-colors">
-                  Continuar entrenamiento
-                </button>
-                <button className="w-full border border-gray-300 text-gray-700 py-3 px-4 rounded-lg font-medium hover:bg-gray-50 transition-colors">
-                  Ver logros
-                </button>
-              </div>
-            </div>
-
-            {/* Achievements Preview */}
-            <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Logros recientes</h3>
-              <div className="text-center text-gray-500">
-                <Trophy className="h-12 w-12 mx-auto mb-2 text-gray-300" />
-                <p className="text-sm">Aún no tienes logros</p>
-                <p className="text-xs">¡Completa tu primer escenario para empezar!</p>
+            {/* Progress Bar */}
+            <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-gray-700">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Progreso del Nivel</h2>
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600 dark:text-gray-400">Nivel {userStats?.level || 1}</span>
+                  <span className="text-gray-600 dark:text-gray-400">{userStats?.total_xp || 0} XP</span>
+                </div>
+                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                  <div 
+                    className="bg-purple-600 h-2 rounded-full transition-all duration-300"
+                    style={{ 
+                      width: `${Math.min(((userStats?.total_xp || 0) % 1000) / 10, 100)}%` 
+                    }}
+                  ></div>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  {1000 - ((userStats?.total_xp || 0) % 1000)} XP para el siguiente nivel
+                </p>
               </div>
             </div>
           </div>
