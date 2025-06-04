@@ -5,7 +5,6 @@ import { useToast } from '@/hooks/use-toast';
 import type { Database } from '@/integrations/supabase/types';
 
 type Scenario = Database['public']['Tables']['scenarios']['Row'];
-type ScenarioInsert = Database['public']['Tables']['scenarios']['Insert'];
 
 export const useScenarios = () => {
   const { toast } = useToast();
@@ -34,14 +33,21 @@ export const useScenarios = () => {
 
       if (error) {
         console.error('Error loading scenarios:', error);
-        throw error;
+        setError(`Error al cargar escenarios: ${error.message}`);
+        toast({
+          title: "Error",
+          description: `No se pudieron cargar los escenarios: ${error.message}`,
+          variant: "destructive",
+        });
+        return;
       }
 
-      console.log('Scenarios loaded successfully:', data);
+      console.log('Scenarios loaded successfully:', data?.length || 0, 'scenarios');
       setScenarios(data || []);
     } catch (err) {
       console.error('Error in loadScenarios:', err);
-      setError(err instanceof Error ? err.message : 'Error desconocido al cargar escenarios');
+      const errorMessage = err instanceof Error ? err.message : 'Error desconocido al cargar escenarios';
+      setError(errorMessage);
       toast({
         title: "Error",
         description: "No se pudieron cargar los escenarios",
@@ -74,7 +80,7 @@ export const useScenarios = () => {
 
       if (error) {
         console.error('Error creating scenario:', error);
-        throw error;
+        throw new Error(`Error al crear escenario: ${error.message}`);
       }
 
       console.log('Scenario created successfully:', data);
@@ -88,9 +94,10 @@ export const useScenarios = () => {
       return data;
     } catch (err) {
       console.error('Error in createScenario:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Error desconocido';
       toast({
         title: "Error",
-        description: "No se pudo crear el escenario",
+        description: errorMessage,
         variant: "destructive",
       });
       throw err;
@@ -120,7 +127,7 @@ export const useScenarios = () => {
 
       if (error) {
         console.error('Error updating scenario:', error);
-        throw error;
+        throw new Error(`Error al actualizar escenario: ${error.message}`);
       }
 
       console.log('Scenario updated successfully:', data);
@@ -134,9 +141,10 @@ export const useScenarios = () => {
       return data;
     } catch (err) {
       console.error('Error in updateScenario:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Error desconocido';
       toast({
         title: "Error",
-        description: "No se pudo actualizar el escenario",
+        description: errorMessage,
         variant: "destructive",
       });
       throw err;

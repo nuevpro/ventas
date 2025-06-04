@@ -5,7 +5,6 @@ import { useToast } from '@/hooks/use-toast';
 import type { Database } from '@/integrations/supabase/types';
 
 type KnowledgeDocument = Database['public']['Tables']['knowledge_base']['Row'];
-type KnowledgeInsert = Database['public']['Tables']['knowledge_base']['Insert'];
 
 export const useKnowledgeBase = () => {
   const { toast } = useToast();
@@ -31,14 +30,21 @@ export const useKnowledgeBase = () => {
 
       if (error) {
         console.error('Error loading knowledge base documents:', error);
-        throw error;
+        setError(`Error al cargar documentos: ${error.message}`);
+        toast({
+          title: "Error",
+          description: `No se pudieron cargar los documentos: ${error.message}`,
+          variant: "destructive",
+        });
+        return;
       }
 
-      console.log('Knowledge base documents loaded successfully:', data);
+      console.log('Knowledge base documents loaded successfully:', data?.length || 0, 'documents');
       setDocuments(data || []);
     } catch (err) {
       console.error('Error in loadDocuments:', err);
-      setError(err instanceof Error ? err.message : 'Error desconocido al cargar documentos');
+      const errorMessage = err instanceof Error ? err.message : 'Error desconocido al cargar documentos';
+      setError(errorMessage);
       toast({
         title: "Error",
         description: "No se pudieron cargar los documentos",
@@ -71,7 +77,7 @@ export const useKnowledgeBase = () => {
 
       if (error) {
         console.error('Error creating knowledge base document:', error);
-        throw error;
+        throw new Error(`Error al crear documento: ${error.message}`);
       }
 
       console.log('Knowledge base document created successfully:', data);
@@ -85,9 +91,10 @@ export const useKnowledgeBase = () => {
       return data;
     } catch (err) {
       console.error('Error in createDocument:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Error desconocido';
       toast({
         title: "Error",
-        description: "No se pudo crear el documento",
+        description: errorMessage,
         variant: "destructive",
       });
       throw err;
@@ -118,7 +125,7 @@ export const useKnowledgeBase = () => {
 
       if (error) {
         console.error('Error updating knowledge base document:', error);
-        throw error;
+        throw new Error(`Error al actualizar documento: ${error.message}`);
       }
 
       console.log('Knowledge base document updated successfully:', data);
@@ -132,9 +139,10 @@ export const useKnowledgeBase = () => {
       return data;
     } catch (err) {
       console.error('Error in updateDocument:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Error desconocido';
       toast({
         title: "Error",
-        description: "No se pudo actualizar el documento",
+        description: errorMessage,
         variant: "destructive",
       });
       throw err;
@@ -152,7 +160,7 @@ export const useKnowledgeBase = () => {
 
       if (error) {
         console.error('Error deleting knowledge base document:', error);
-        throw error;
+        throw new Error(`Error al eliminar documento: ${error.message}`);
       }
 
       console.log('Knowledge base document deleted successfully');
@@ -165,9 +173,10 @@ export const useKnowledgeBase = () => {
       await loadDocuments();
     } catch (err) {
       console.error('Error in deleteDocument:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Error desconocido';
       toast({
         title: "Error",
-        description: "No se pudo eliminar el documento",
+        description: errorMessage,
         variant: "destructive",
       });
       throw err;

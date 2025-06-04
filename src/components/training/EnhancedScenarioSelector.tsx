@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Users, GraduationCap, Briefcase, MessageSquare, Handshake, HeadphonesIcon, Search, Play, Edit, Plus } from 'lucide-react';
+import { Users, GraduationCap, Briefcase, MessageSquare, Handshake, HeadphonesIcon, Search, Play, Edit, Plus, AlertCircle } from 'lucide-react';
 import { useScenarios } from '@/hooks/useScenarios';
 import ScenarioDialog from './ScenarioDialog';
 import type { Database } from '@/integrations/supabase/types';
@@ -55,11 +55,11 @@ const categoryConfig = {
 };
 
 const EnhancedScenarioSelector = ({ onSelectScenario }: EnhancedScenarioSelectorProps) => {
-  const { scenarios, loading, error, getScenariosByCategory, getCategories } = useScenarios();
+  const { scenarios, loading, error, getScenariosByCategory, getCategories, loadScenarios } = useScenarios();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
 
-  console.log('EnhancedScenarioSelector - scenarios:', scenarios);
+  console.log('EnhancedScenarioSelector - scenarios:', scenarios?.length || 0);
   console.log('EnhancedScenarioSelector - loading:', loading);
   console.log('EnhancedScenarioSelector - error:', error);
 
@@ -102,9 +102,11 @@ const EnhancedScenarioSelector = ({ onSelectScenario }: EnhancedScenarioSelector
   if (error) {
     return (
       <div className="text-center py-8">
-        <p className="text-red-500 mb-4">Error al cargar escenarios: {error}</p>
-        <Button onClick={() => window.location.reload()}>
-          Recargar
+        <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+        <p className="text-red-500 mb-4">Error al cargar escenarios</p>
+        <p className="text-sm text-gray-600 mb-4">{error}</p>
+        <Button onClick={loadScenarios}>
+          Reintentar
         </Button>
       </div>
     );
@@ -221,10 +223,18 @@ const EnhancedScenarioSelector = ({ onSelectScenario }: EnhancedScenarioSelector
             })}
           </div>
 
-          {filteredScenarios.length === 0 && (
+          {filteredScenarios.length === 0 && scenarios.length > 0 && (
             <div className="text-center py-12">
               <p className="text-gray-500 mb-4">
                 No se encontraron escenarios que coincidan con tu búsqueda.
+              </p>
+            </div>
+          )}
+
+          {scenarios.length === 0 && !loading && (
+            <div className="text-center py-12">
+              <p className="text-gray-500 mb-4">
+                No hay escenarios disponibles.
               </p>
               <ScenarioDialog 
                 trigger={
