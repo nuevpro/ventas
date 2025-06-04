@@ -1,24 +1,33 @@
-import { useLocation } from "react-router-dom";
-import { useEffect } from "react";
+
+import React from 'react';
+import { Link } from 'react-router-dom';
+import { Home, ArrowLeft } from 'lucide-react';
 
 const NotFound = () => {
-  const location = useLocation();
-
-  useEffect(() => {
-    console.error(
-      "404 Error: User attempted to access non-existent route:",
-      location.pathname
-    );
-  }, [location.pathname]);
-
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
       <div className="text-center">
-        <h1 className="text-4xl font-bold mb-4">404</h1>
-        <p className="text-xl text-gray-600 mb-4">Oops! Page not found</p>
-        <a href="/" className="text-blue-500 hover:text-blue-700 underline">
-          Return to Home
-        </a>
+        <h1 className="text-9xl font-bold text-purple-600">404</h1>
+        <h2 className="text-3xl font-bold text-gray-900 mt-4">Página no encontrada</h2>
+        <p className="text-gray-600 mt-4 max-w-md mx-auto">
+          Lo sentimos, la página que estás buscando no existe o ha sido movida.
+        </p>
+        <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center">
+          <Link
+            to="/"
+            className="inline-flex items-center bg-purple-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-purple-700 transition-colors"
+          >
+            <Home className="h-5 w-5 mr-2" />
+            Ir al Dashboard
+          </Link>
+          <button
+            onClick={() => window.history.back()}
+            className="inline-flex items-center border border-gray-300 text-gray-700 px-6 py-3 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+          >
+            <ArrowLeft className="h-5 w-5 mr-2" />
+            Volver atrás
+          </button>
+        </div>
       </div>
     </div>
   );
