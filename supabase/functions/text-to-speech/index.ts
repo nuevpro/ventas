@@ -14,7 +14,7 @@ serve(async (req) => {
   }
 
   try {
-    const { text, voice = 'Sarah', model = 'eleven_multilingual_v2' } = await req.json();
+    const { text, voice = 'Sarah', model = 'eleven_multilingual_v2', settings } = await req.json();
 
     if (!text) {
       throw new Error('Text is required');
@@ -31,10 +31,20 @@ serve(async (req) => {
       'Sarah': 'EXAVITQu4vr4xnSDxMaL',  // Professional female
       'George': 'JBFqnCBsd6RMkjVDRZzb', // Business male
       'Charlotte': 'XB0fDUnXU5powFXDhCwa', // Friendly female
-      'Daniel': 'onwK4e9ZLuTAKqWW03F9'  // Authoritative male
+      'Daniel': 'onwK4e9ZLuTAKqWW03F9',  // Authoritative male
+      'Aria': '9BWtsMINqrJLrRacOk9x',     // Natural female
+      'Roger': 'CwhRBWXzGAHq8TQ4Fs17',   // Mature male
     };
 
     const voiceId = voiceMapping[voice] || voiceMapping['Sarah'];
+
+    // Default voice settings or use custom settings
+    const voiceSettings = settings || {
+      stability: 0.6,
+      similarity_boost: 0.8,
+      style: 0.3,
+      use_speaker_boost: true
+    };
 
     const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
       method: 'POST',
@@ -46,12 +56,7 @@ serve(async (req) => {
       body: JSON.stringify({
         text,
         model_id: model,
-        voice_settings: {
-          stability: 0.6,
-          similarity_boost: 0.8,
-          style: 0.3,
-          use_speaker_boost: true
-        },
+        voice_settings: voiceSettings,
       }),
     });
 

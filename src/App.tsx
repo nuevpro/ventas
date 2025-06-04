@@ -9,6 +9,7 @@ import { ThemeProvider } from "./hooks/useTheme";
 import Layout from "./components/Layout";
 import Dashboard from "./pages/Dashboard";
 import Training from "./pages/Training";
+import Knowledge from "./pages/Knowledge";
 import Challenges from "./pages/Challenges";
 import History from "./pages/History";
 import Achievements from "./pages/Achievements";
@@ -29,6 +30,7 @@ const App = () => (
               <Routes>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/training" element={<Training />} />
+                <Route path="/knowledge" element={<Knowledge />} />
                 <Route path="/challenges" element={<Challenges />} />
                 <Route path="/history" element={<History />} />
                 <Route path="/achievements" element={<Achievements />} />

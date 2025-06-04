@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { Mic, MicOff, Volume2, VolumeX, Send, RotateCcw, User, Bot } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -29,6 +28,7 @@ const ConversationTraining = ({ scenario, difficulty, onComplete }: Conversation
   const [isLoading, setIsLoading] = useState(false);
   const [audioEnabled, setAudioEnabled] = useState(true);
   const [clientPersonality, setClientPersonality] = useState('');
+  const [knowledgeBase, setKnowledgeBase] = useState([]);
   const { toast } = useToast();
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -40,10 +40,19 @@ const ConversationTraining = ({ scenario, difficulty, onComplete }: Conversation
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Initialize conversation with AI greeting
+  // Load knowledge base and initialize conversation
   useEffect(() => {
+    loadKnowledgeBase();
     initializeConversation();
   }, [scenario, difficulty]);
+
+  const loadKnowledgeBase = () => {
+    const savedDocs = localStorage.getItem('knowledgeDocuments');
+    if (savedDocs) {
+      const docs = JSON.parse(savedDocs);
+      setKnowledgeBase(docs);
+    }
+  };
 
   const initializeConversation = async () => {
     const greetingMessages = {
@@ -74,8 +83,22 @@ const ConversationTraining = ({ scenario, difficulty, onComplete }: Conversation
     // Generate audio for greeting if enabled
     if (audioEnabled) {
       try {
+        // Get ElevenLabs configuration
+        const elevenLabsConfig = localStorage.getItem('elevenLabsConfig');
+        const config = elevenLabsConfig ? JSON.parse(elevenLabsConfig) : {};
+
         const audioResponse = await supabase.functions.invoke('text-to-speech', {
-          body: { text: greeting, voice: 'Sarah' },
+          body: { 
+            text: greeting, 
+            voice: 'Sarah',
+            model: config.defaultModel || 'eleven_multilingual_v2',
+            settings: config.stability ? {
+              stability: config.stability,
+              similarity_boost: config.similarityBoost,
+              style: config.style,
+              use_speaker_boost: config.useSpeakerBoost
+            } : undefined
+          },
         });
 
         if (!audioResponse.error && audioResponse.data.audioContent) {
@@ -173,7 +196,7 @@ const ConversationTraining = ({ scenario, difficulty, onComplete }: Conversation
     setIsLoading(true);
 
     try {
-      // Send to AI conversation function with conversation history
+      // Send to AI conversation function with conversation history and knowledge base
       const { data, error } = await supabase.functions.invoke('ai-conversation', {
         body: {
           message: content,
@@ -181,6 +204,7 @@ const ConversationTraining = ({ scenario, difficulty, onComplete }: Conversation
           userProfile: 'trainee',
           difficulty,
           conversationHistory: messages.slice(-5), // Send last 5 messages for context
+          knowledgeBase: knowledgeBase, // Include knowledge base
         },
       });
 
@@ -193,11 +217,25 @@ const ConversationTraining = ({ scenario, difficulty, onComplete }: Conversation
         timestamp: new Date(),
       };
 
-      // Generate audio with the specified voice from the response
+      // Generate audio with the specified voice and custom settings
       if (audioEnabled && data.voice) {
         try {
+          // Get ElevenLabs configuration
+          const elevenLabsConfig = localStorage.getItem('elevenLabsConfig');
+          const config = elevenLabsConfig ? JSON.parse(elevenLabsConfig) : {};
+
           const audioResponse = await supabase.functions.invoke('text-to-speech', {
-            body: { text: data.response, voice: data.voice },
+            body: { 
+              text: data.response, 
+              voice: data.voice,
+              model: config.defaultModel || 'eleven_multilingual_v2',
+              settings: config.stability ? {
+                stability: config.stability,
+                similarity_boost: config.similarityBoost,
+                style: config.style,
+                use_speaker_boost: config.useSpeakerBoost
+              } : undefined
+            },
           });
 
           if (!audioResponse.error && audioResponse.data.audioContent) {
@@ -238,7 +276,7 @@ const ConversationTraining = ({ scenario, difficulty, onComplete }: Conversation
         body: {
           userResponse: conversationText,
           scenario,
-          knowledgeBase: `Base de conocimiento para ${scenario}`,
+          knowledgeBase: knowledgeBase.map(doc => `${doc.title}: ${doc.content}`).join('\n'),
           expectedOutcomes: 'Objetivos específicos del entrenamiento completados exitosamente',
         },
       });
@@ -279,6 +317,11 @@ const ConversationTraining = ({ scenario, difficulty, onComplete }: Conversation
             <Badge className={getDifficultyColor()}>
               {difficulty}
             </Badge>
+            {knowledgeBase.length > 0 && (
+              <Badge variant="outline">
+                {knowledgeBase.length} docs disponibles
+              </Badge>
+            )}
           </div>
           <div className="flex space-x-2">
             <Button

@@ -39,7 +39,7 @@ serve(async (req) => {
   }
 
   try {
-    const { message, scenario, userProfile, difficulty, conversationHistory = [] } = await req.json();
+    const { message, scenario, userProfile, difficulty, conversationHistory = [], knowledgeBase } = await req.json();
 
     if (!openAIApiKey) {
       throw new Error('OpenAI API key not configured');
@@ -53,6 +53,12 @@ serve(async (req) => {
       intermediate: 'Muestra interés moderado pero presenta objeciones típicas. Requiere persuasión.',
       advanced: 'Sé muy exigente y escéptico. Presenta múltiples objeciones y requiere argumentos sólidos.'
     };
+
+    // Construir contexto de conocimiento
+    let knowledgeContext = '';
+    if (knowledgeBase && knowledgeBase.length > 0) {
+      knowledgeContext = `\n\nBASE DE CONOCIMIENTO DISPONIBLE:\n${knowledgeBase.map(doc => `- ${doc.title}: ${doc.content.substring(0, 500)}`).join('\n')}`;
+    }
 
     const systemPrompt = `Eres un ${scenario.includes('sales') ? 'cliente potencial' : scenario.includes('recruitment') ? 'entrevistador profesional' : 'miembro de la audiencia'} realista en una simulación de entrenamiento.
 
@@ -70,9 +76,12 @@ INSTRUCCIONES ESPECÍFICAS:
 - Responde de manera concisa (2-3 oraciones máximo)
 - Si el usuario comete errores graves, reacciona de forma realista
 - Usa un lenguaje natural y coloquial apropiado para el contexto empresarial
+- Si el usuario menciona información incorrecta, corrígelo sutilmente como lo haría una persona real
 
 POSIBLES OBJECIONES/PREGUNTAS A USAR:
 ${clientProfile.objections.join(', ')}
+
+${knowledgeContext}
 
 CONTEXTO DE LA CONVERSACIÓN:
 ${conversationHistory.slice(-3).map(msg => `${msg.sender}: ${msg.content}`).join('\n')}
