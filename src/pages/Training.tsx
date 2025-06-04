@@ -73,9 +73,9 @@ const Training = () => {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
         <EvaluationResults
-          results={evaluationResults}
-          onStartNew={resetTraining}
-          onBack={resetTraining}
+          evaluation={evaluationResults}
+          onRetry={resetTraining}
+          onNextLevel={resetTraining}
         />
       </div>
     );
@@ -111,8 +111,7 @@ const Training = () => {
                   </CardHeader>
                   <CardContent>
                     <ScenarioSelector
-                      selectedScenario={selectedScenario}
-                      onScenarioSelect={handleScenarioSelect}
+                      onSelectScenario={handleScenarioSelect}
                     />
                   </CardContent>
                 </Card>

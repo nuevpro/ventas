@@ -6,6 +6,7 @@ import { useToast } from '@/hooks/use-toast';
 
 interface SessionData {
   id: string;
+  user_id: string;
   scenario_id: string;
   scenario_title: string;
   client_emotion: string;
@@ -18,6 +19,8 @@ interface SessionData {
   total_messages: number;
   user_words_count: number;
   ai_words_count: number;
+  created_at: string;
+  updated_at: string;
 }
 
 interface Message {
@@ -105,7 +108,7 @@ export class SessionManager {
         return null;
       }
 
-      this.currentSession = data;
+      this.currentSession = data as SessionData;
       return data.id;
     } catch (error) {
       console.error('Error starting session:', error);
@@ -139,17 +142,23 @@ export class SessionManager {
 
       // Actualizar contadores de la sesión
       const wordCount = content.split(' ').length;
-      const updateField = sender === 'user' ? 'user_words_count' : 'ai_words_count';
+      const updates: any = {
+        total_messages: this.currentSession.total_messages + 1,
+      };
+      
+      if (sender === 'user') {
+        updates.user_words_count = this.currentSession.user_words_count + wordCount;
+      } else {
+        updates.ai_words_count = this.currentSession.ai_words_count + wordCount;
+      }
       
       await supabase
         .from('training_sessions')
-        .update({
-          total_messages: this.currentSession.total_messages + 1,
-          [updateField]: sender === 'user' ? 
-            this.currentSession.user_words_count + wordCount : 
-            this.currentSession.ai_words_count + wordCount
-        })
+        .update(updates)
         .eq('id', this.currentSession.id);
+
+      // Actualizar la sesión local
+      this.currentSession = { ...this.currentSession, ...updates };
 
       return true;
     } catch (error) {
@@ -248,7 +257,7 @@ export class SessionManager {
         return [];
       }
 
-      return data || [];
+      return (data || []) as SessionData[];
     } catch (error) {
       console.error('Error fetching sessions:', error);
       return [];
@@ -268,7 +277,7 @@ export class SessionManager {
         return [];
       }
 
-      return data || [];
+      return (data || []) as Message[];
     } catch (error) {
       console.error('Error fetching messages:', error);
       return [];
@@ -281,14 +290,14 @@ export class SessionManager {
         .from('session_evaluations')
         .select('*')
         .eq('session_id', sessionId)
-        .single();
+        .maybeSingle();
 
       if (error) {
         console.error('Error fetching evaluation:', error);
         return null;
       }
 
-      return data;
+      return data as SessionEvaluation | null;
     } catch (error) {
       console.error('Error fetching evaluation:', error);
       return null;
