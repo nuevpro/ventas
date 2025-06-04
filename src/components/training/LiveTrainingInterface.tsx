@@ -174,6 +174,10 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
         body: {
           message: "INICIO_SESION",
           scenario: config.scenario,
+          scenarioTitle: config.scenarioTitle,
+          scenarioDescription: config.scenarioDescription,
+          promptInstructions: config.promptInstructions,
+          expectedOutcomes: config.expectedOutcomes,
           clientEmotion: config.clientEmotion,
           interactionMode: config.interactionMode,
           voicePersonality: selectedVoice?.personality,
@@ -278,6 +282,10 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
         body: {
           message: content,
           scenario: config.scenario,
+          scenarioTitle: config.scenarioTitle,
+          scenarioDescription: config.scenarioDescription,
+          promptInstructions: config.promptInstructions,
+          expectedOutcomes: config.expectedOutcomes,
           clientEmotion: config.clientEmotion,
           voicePersonality: selectedVoice?.personality,
           emotionalContext: selectedVoice?.emotionalContext,
@@ -304,7 +312,6 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
         await sessionManager.saveMessage(sessionId, data.response, 'ai', sessionTime);
       }
 
-      // Update real-time metrics with actual analysis
       await updateRealTimeMetrics(content, data.response);
 
       if (audioEnabled && config.interactionMode === 'call' && selectedVoice) {
@@ -324,11 +331,9 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
   };
 
   const updateRealTimeMetrics = async (userMessage: string, aiResponse: string) => {
-    // Calculate metrics based on conversation analysis
     const messageLength = userMessage.length;
     const messageCount = messages.length / 2;
     
-    // Base metrics that evolve based on conversation
     const rapportScore = Math.min(100, Math.max(40, 60 + messageCount * 2 + (messageLength > 50 ? 10 : 0)));
     const clarityScore = Math.min(100, Math.max(50, 70 + (messageLength > 30 ? 15 : -5)));
     const empathyScore = Math.min(100, Math.max(45, 65 + messageCount * 1.5));
@@ -448,6 +453,9 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
         body: {
           userResponse: conversationText,
           scenario: config.scenario,
+          scenarioTitle: config.scenarioTitle,
+          scenarioDescription: config.scenarioDescription,
+          expectedOutcomes: config.expectedOutcomes,
           clientEmotion: config.clientEmotion,
           sessionDuration: sessionTime,
         },
@@ -458,7 +466,6 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
         throw error;
       }
 
-      // Ensure scores are integers from 0-100
       const evaluation = {
         rapport: Math.round(Math.max(0, Math.min(100, data.rapport || realTimeMetrics.rapport))),
         clarity: Math.round(Math.max(0, Math.min(100, data.clarity || realTimeMetrics.clarity))),
@@ -472,7 +479,12 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
         realTimeMetrics,
         transcript: messages,
         sessionDuration: sessionTime,
-        voiceUsed: selectedVoice
+        voiceUsed: selectedVoice,
+        scenarioInfo: {
+          title: config.scenarioTitle,
+          description: config.scenarioDescription,
+          objectives: config.expectedOutcomes?.objectives || []
+        }
       };
 
       if (sessionId) {
@@ -487,7 +499,6 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
         variant: "destructive",
       });
       
-      // Fallback evaluation with current metrics
       const fallbackEvaluation = {
         ...realTimeMetrics,
         strengths: realTimeMetrics.positivePoints,
@@ -495,7 +506,12 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
         specificFeedback: 'Sesión completada',
         transcript: messages,
         sessionDuration: sessionTime,
-        voiceUsed: selectedVoice
+        voiceUsed: selectedVoice,
+        scenarioInfo: {
+          title: config.scenarioTitle,
+          description: config.scenarioDescription,
+          objectives: config.expectedOutcomes?.objectives || []
+        }
       };
       
       if (sessionId) {
@@ -516,6 +532,9 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
               </div>
               <h3 className="text-lg font-semibold mb-2">¿Listo para comenzar?</h3>
               <p className="text-gray-600 dark:text-gray-400 mb-4">
+                Escenario: {config.scenarioTitle}
+              </p>
+              <p className="text-sm text-gray-500 dark:text-gray-500 mb-4">
                 Vas a entrenar con {selectedVoice?.voiceName || 'un cliente virtual'}
               </p>
               {selectedVoice && (
@@ -556,9 +575,7 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[700px]">
-      {/* Área principal de conversación */}
       <div className="lg:col-span-2 space-y-4">
-        {/* Header de sesión */}
         <div className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-lg shadow">
           <div className="flex items-center space-x-4">
             <Badge className={`${
@@ -626,7 +643,6 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
           </div>
         </div>
 
-        {/* Área de conversación */}
         <div className="flex-1">
           {config.interactionMode === 'call' ? (
             <Card className="h-[500px] flex flex-col">
@@ -644,7 +660,6 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
                     </div>
                   </div>
 
-                  {/* Animación de ondas de audio */}
                   <div className="flex items-center justify-center space-x-1">
                     {[...Array(5)].map((_, i) => (
                       <div
@@ -673,7 +688,6 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
         </div>
       </div>
 
-      {/* Panel lateral */}
       <div className="space-y-4">
         <RealTimeEvaluation
           metrics={realTimeMetrics}

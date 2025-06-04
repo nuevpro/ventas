@@ -265,6 +265,13 @@ export type Database = {
             referencedRelation: "training_sessions"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "fk_conversation_messages_session_id"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "training_sessions"
+            referencedColumns: ["id"]
+          },
         ]
       }
       knowledge_base: {
@@ -364,6 +371,13 @@ export type Database = {
           session_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "fk_real_time_metrics_session_id"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "training_sessions"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "real_time_metrics_session_id_fkey"
             columns: ["session_id"]
@@ -467,6 +481,13 @@ export type Database = {
           strengths?: string[] | null
         }
         Relationships: [
+          {
+            foreignKeyName: "fk_session_evaluations_session_id"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "training_sessions"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "session_evaluations_session_id_fkey"
             columns: ["session_id"]
@@ -577,6 +598,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "fk_training_sessions_user_id"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "training_sessions_scenario_id_fkey"
             columns: ["scenario_id"]
             isOneToOne: false
@@ -612,6 +640,20 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "fk_user_achievements_achievement_id"
+            columns: ["achievement_id"]
+            isOneToOne: false
+            referencedRelation: "achievements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_user_achievements_user_id"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "user_achievements_achievement_id_fkey"
             columns: ["achievement_id"]
             isOneToOne: false
@@ -645,7 +687,15 @@ export type Database = {
           points_earned?: number | null
           user_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "fk_user_activity_log_user_id"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_stats: {
         Row: {
@@ -681,7 +731,15 @@ export type Database = {
           updated_at?: string | null
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "fk_user_stats_user_id"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
@@ -711,9 +769,33 @@ export type Database = {
         }
         Returns: string
       }
+      create_custom_scenario: {
+        Args: {
+          p_title: string
+          p_description: string
+          p_scenario_type: string
+          p_difficulty_level?: number
+          p_prompt_instructions?: string
+          p_expected_outcomes?: Json
+        }
+        Returns: string
+      }
       get_current_user_id: {
         Args: Record<PropertyKey, never>
         Returns: string
+      }
+      get_scenarios_by_category: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          id: string
+          title: string
+          description: string
+          scenario_type: string
+          difficulty_level: number
+          is_active: boolean
+          created_at: string
+          updated_at: string
+        }[]
       }
       halfvec_avg: {
         Args: { "": number[] }
@@ -786,6 +868,18 @@ export type Database = {
       sparsevec_typmod_in: {
         Args: { "": unknown[] }
         Returns: number
+      }
+      update_scenario: {
+        Args: {
+          p_scenario_id: string
+          p_title: string
+          p_description: string
+          p_scenario_type: string
+          p_difficulty_level: number
+          p_prompt_instructions?: string
+          p_expected_outcomes?: Json
+        }
+        Returns: boolean
       }
       vector_avg: {
         Args: { "": number[] }
