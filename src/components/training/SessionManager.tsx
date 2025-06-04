@@ -59,10 +59,17 @@ export class SessionManager {
   async startSession(config: any): Promise<string | null> {
     if (!this.userId) {
       console.error('No user ID available');
+      this.toast?.({
+        title: "Error",
+        description: "Usuario no autenticado",
+        variant: "destructive",
+      });
       return null;
     }
 
     try {
+      console.log('Creating session with user ID:', this.userId);
+      
       // Create conversation log object that matches the expected format
       const conversationLog = {
         scenario_title: config.scenarioTitle || 'Entrenamiento General',
@@ -79,11 +86,13 @@ export class SessionManager {
       // Create a session data object that matches the database schema
       const sessionData: DbTrainingSessionInsert = {
         user_id: this.userId,
-        scenario_id: config.scenario || 'default',
+        scenario_id: config.scenario || 'default-scenario',
         duration_minutes: 0,
         score: 0,
         conversation_log: conversationLog as any
       };
+
+      console.log('Inserting session data:', sessionData);
 
       const { data, error } = await supabase
         .from('training_sessions')
@@ -95,7 +104,7 @@ export class SessionManager {
         console.error('Error creating session:', error);
         this.toast?.({
           title: "Error",
-          description: "No se pudo crear la sesión de entrenamiento",
+          description: `No se pudo crear la sesión de entrenamiento: ${error.message}`,
           variant: "destructive",
         });
         return null;
@@ -116,12 +125,17 @@ export class SessionManager {
       };
 
       console.log('Session started successfully:', data.id);
+      this.toast?.({
+        title: "¡Éxito!",
+        description: "Sesión de entrenamiento iniciada correctamente",
+      });
+      
       return data.id;
     } catch (error) {
       console.error('Error starting session:', error);
       this.toast?.({
         title: "Error",
-        description: "Error al iniciar la sesión",
+        description: "Error al iniciar la sesión de entrenamiento",
         variant: "destructive",
       });
       return null;
@@ -278,9 +292,14 @@ export class SessionManager {
   }
 
   async getUserSessions(limit: number = 10): Promise<SessionData[]> {
-    if (!this.userId) return [];
+    if (!this.userId) {
+      console.log('No user ID available for getUserSessions');
+      return [];
+    }
 
     try {
+      console.log('Fetching sessions for user:', this.userId);
+      
       const { data, error } = await supabase
         .from('training_sessions')
         .select('*')
@@ -292,6 +311,8 @@ export class SessionManager {
         console.error('Error fetching sessions:', error);
         return [];
       }
+
+      console.log('Sessions fetched successfully:', data?.length || 0);
 
       // Transform the data to include our extended fields
       return (data || []).map(session => ({
@@ -371,6 +392,7 @@ export const useSessionManager = () => {
   useEffect(() => {
     sessionManager.setToast(toast);
     if (user?.id) {
+      console.log('Setting user ID in SessionManager:', user.id);
       sessionManager.setUserId(user.id);
     }
   }, [user, toast]);

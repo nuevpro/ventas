@@ -23,17 +23,25 @@ export const useChallenges = () => {
 
   useEffect(() => {
     if (!user?.id) {
+      console.log('No user available in useChallenges');
       setLoading(false);
       return;
     }
 
+    console.log('Loading challenges for user:', user.id);
     loadChallenges();
   }, [user?.id]);
 
   const loadChallenges = async () => {
+    if (!user?.id) {
+      console.log('No user ID available for loadChallenges');
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
+      console.log('Starting to load challenges...');
 
       // Cargar desafíos públicos
       const { data: publicChallenges, error: publicError } = await supabase
@@ -48,6 +56,8 @@ export const useChallenges = () => {
         throw publicError;
       }
 
+      console.log('Public challenges loaded:', publicChallenges?.length || 0);
+
       // Cargar desafíos personalizados
       const { data: userCustomChallenges, error: customError } = await supabase
         .from('challenges')
@@ -60,6 +70,8 @@ export const useChallenges = () => {
         console.error('Error loading custom challenges:', customError);
         throw customError;
       }
+
+      console.log('Custom challenges loaded:', userCustomChallenges?.length || 0);
 
       // Procesar desafíos públicos
       const processedPublic = await Promise.all(
@@ -74,7 +86,7 @@ export const useChallenges = () => {
               .from('challenge_participants')
               .select('*')
               .eq('challenge_id', challenge.id)
-              .eq('participant_id', user!.id)
+              .eq('participant_id', user.id)
               .eq('participant_type', 'user')
               .maybeSingle();
 
@@ -109,7 +121,7 @@ export const useChallenges = () => {
               .from('challenge_participants')
               .select('*')
               .eq('challenge_id', challenge.id)
-              .eq('participant_id', user!.id)
+              .eq('participant_id', user.id)
               .eq('participant_type', 'user')
               .maybeSingle();
 
@@ -133,6 +145,7 @@ export const useChallenges = () => {
 
       setChallenges(processedPublic);
       setCustomChallenges(processedCustom);
+      console.log('Challenges loaded successfully');
     } catch (err) {
       console.error('Error loading challenges:', err);
       setError(err instanceof Error ? err.message : 'Error desconocido');
