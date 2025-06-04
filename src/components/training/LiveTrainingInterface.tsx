@@ -2,11 +2,12 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Mic, MicOff, Volume2, VolumeX, Phone, PhoneOff, MessageSquare } from 'lucide-react';
+import { Mic, MicOff, Volume2, VolumeX, Phone, PhoneOff, Pause, Play } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import ConversationTranscript from './ConversationTranscript';
 import RealTimeEvaluation from './RealTimeEvaluation';
+import { useSessionManager } from './SessionManager';
 
 interface LiveTrainingInterfaceProps {
   config: any;
@@ -29,13 +30,15 @@ interface RealTimeMetrics {
 
 const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInterfaceProps) => {
   const [isActive, setIsActive] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [audioEnabled, setAudioEnabled] = useState(true);
   const [messages, setMessages] = useState([]);
   const [currentUserText, setCurrentUserText] = useState('');
   const [sessionTime, setSessionTime] = useState(0);
-  const [callStatus, setCallStatus] = useState('connecting'); // connecting, ringing, connected, ended
+  const [callStatus, setCallStatus] = useState('connecting');
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [realTimeMetrics, setRealTimeMetrics] = useState<RealTimeMetrics>({
     rapport: 75,
     clarity: 80,
@@ -50,24 +53,34 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
   });
 
   const { toast } = useToast();
+  const sessionManager = useSessionManager();
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const sessionStartRef = useRef<Date | null>(null);
   const recognitionRef = useRef<any>(null);
+  const pauseStartRef = useRef<Date | null>(null);
+  const totalPauseTimeRef = useRef<number>(0);
 
   useEffect(() => {
-    if (isActive) {
-      sessionStartRef.current = new Date();
+    if (isActive && !isPaused) {
+      if (!sessionStartRef.current) {
+        sessionStartRef.current = new Date();
+      }
+      
       const timer = setInterval(() => {
-        if (sessionStartRef.current) {
-          setSessionTime(Math.floor((Date.now() - sessionStartRef.current.getTime()) / 1000));
+        if (sessionStartRef.current && !isPaused) {
+          const elapsed = Math.floor((Date.now() - sessionStartRef.current.getTime()) / 1000);
+          setSessionTime(elapsed - totalPauseTimeRef.current);
         }
       }, 1000);
       
-      initializeSession();
+      if (!sessionId) {
+        initializeSession();
+      }
+      
       return () => clearInterval(timer);
     }
-  }, [isActive]);
+  }, [isActive, isPaused]);
 
   // Configurar reconocimiento de voz continuo
   useEffect(() => {
@@ -104,11 +117,15 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
   }, []);
 
   const initializeSession = async () => {
+    // Crear sesión en la base de datos
+    const newSessionId = await sessionManager.startSession(config);
+    if (newSessionId) {
+      setSessionId(newSessionId);
+    }
+
     if (config.interactionMode === 'call') {
-      // Simular proceso de llamada
       setCallStatus('ringing');
       
-      // Sonido de llamada (simulado)
       setTimeout(() => {
         setCallStatus('connected');
         toast({
@@ -150,6 +167,14 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
       };
 
       setMessages([aiMessage]);
+
+      // Guardar mensaje en la base de datos
+      await sessionManager.saveMessage(
+        data.response, 
+        'ai', 
+        sessionTime,
+        undefined
+      );
 
       if (audioEnabled && config.interactionMode === 'call') {
         await generateAndPlayAudio(data.response, data.voice);
@@ -203,6 +228,10 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
     };
 
     setMessages(prev => [...prev, userMessage]);
+
+    // Guardar mensaje del usuario
+    await sessionManager.saveMessage(content, 'user', sessionTime);
+
     setIsSpeaking(true);
 
     try {
@@ -226,7 +255,10 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
 
       setMessages(prev => [...prev, aiMessage]);
 
-      // Actualizar métricas en tiempo real (simulado)
+      // Guardar mensaje de la IA
+      await sessionManager.saveMessage(data.response, 'ai', sessionTime);
+
+      // Actualizar métricas en tiempo real
       updateRealTimeMetrics(content, data.response);
 
       if (audioEnabled && config.interactionMode === 'call') {
@@ -240,21 +272,64 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
     }
   };
 
-  const updateRealTimeMetrics = (userMessage: string, aiResponse: string) => {
-    // Simular actualización de métricas basada en la conversación
+  const updateRealTimeMetrics = async (userMessage: string, aiResponse: string) => {
     const messageCount = messages.length / 2;
     const baseScore = 75;
-    const variation = Math.random() * 10 - 5; // -5 a +5
+    const variation = Math.random() * 10 - 5;
     
-    setRealTimeMetrics(prev => ({
-      ...prev,
+    const newMetrics = {
+      ...realTimeMetrics,
       overallScore: Math.max(0, Math.min(100, baseScore + variation + messageCount)),
-      rapport: Math.max(0, Math.min(100, prev.rapport + (Math.random() * 6 - 3))),
-      clarity: Math.max(0, Math.min(100, prev.clarity + (Math.random() * 4 - 2))),
-      empathy: Math.max(0, Math.min(100, prev.empathy + (Math.random() * 8 - 4))),
-      accuracy: Math.max(0, Math.min(100, prev.accuracy + (Math.random() * 6 - 3))),
+      rapport: Math.max(0, Math.min(100, realTimeMetrics.rapport + (Math.random() * 6 - 3))),
+      clarity: Math.max(0, Math.min(100, realTimeMetrics.clarity + (Math.random() * 4 - 2))),
+      empathy: Math.max(0, Math.min(100, realTimeMetrics.empathy + (Math.random() * 8 - 4))),
+      accuracy: Math.max(0, Math.min(100, realTimeMetrics.accuracy + (Math.random() * 6 - 3))),
       trend: (Math.random() > 0.6 ? 'up' : Math.random() > 0.3 ? 'stable' : 'down') as 'up' | 'down' | 'stable'
-    }));
+    };
+
+    setRealTimeMetrics(newMetrics);
+
+    // Guardar métricas en la base de datos
+    await sessionManager.saveRealTimeMetric('overall_score', newMetrics.overallScore);
+    await sessionManager.saveRealTimeMetric('rapport', newMetrics.rapport);
+    await sessionManager.saveRealTimeMetric('clarity', newMetrics.clarity);
+    await sessionManager.saveRealTimeMetric('empathy', newMetrics.empathy);
+    await sessionManager.saveRealTimeMetric('accuracy', newMetrics.accuracy);
+  };
+
+  const togglePause = () => {
+    if (isPaused) {
+      // Reanudar
+      if (pauseStartRef.current) {
+        totalPauseTimeRef.current += Math.floor((Date.now() - pauseStartRef.current.getTime()) / 1000);
+        pauseStartRef.current = null;
+      }
+      
+      if (recognitionRef.current && config.interactionMode === 'call') {
+        recognitionRef.current.start();
+        setIsListening(true);
+      }
+      
+      setIsPaused(false);
+      toast({
+        title: "Sesión reanudada",
+        description: "La conversación continúa",
+      });
+    } else {
+      // Pausar
+      pauseStartRef.current = new Date();
+      
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+        setIsListening(false);
+      }
+      
+      setIsPaused(true);
+      toast({
+        title: "Sesión pausada",
+        description: "La conversación está en pausa",
+      });
+    }
   };
 
   const toggleMicrophone = () => {
@@ -301,12 +376,18 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
       });
 
       if (error) throw error;
-      onComplete({
+
+      const evaluation = {
         ...data,
         realTimeMetrics,
         transcript: messages,
         sessionDuration: sessionTime
-      });
+      };
+
+      // Guardar evaluación y finalizar sesión
+      await sessionManager.endSession(evaluation);
+      
+      onComplete(evaluation);
     } catch (error) {
       console.error('Error evaluating session:', error);
     }
@@ -354,7 +435,7 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
               </div>
               <h3 className="text-lg font-semibold mb-2">¿Listo para comenzar?</h3>
               <p className="text-gray-600 dark:text-gray-400 mb-4">
-                Vas a entrenar con un cliente virtual
+                Vas a entrenar con un cliente virtual usando la voz {config.selectedVoiceName || 'predeterminada'}
               </p>
               <Button onClick={() => setIsActive(true)} className="w-full" size="lg">
                 Iniciar {config.interactionMode === 'call' ? 'Llamada' : 'Chat'}
@@ -371,6 +452,7 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
                 <div>Escenario: {config.scenario}</div>
                 <div>Cliente: {config.clientEmotion}</div>
                 <div>Modo: {config.interactionMode}</div>
+                <div>Voz: {config.selectedVoiceName || 'Predeterminada'}</div>
               </div>
             </CardContent>
           </Card>
@@ -383,29 +465,52 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[700px]">
       {/* Área principal de conversación */}
       <div className="lg:col-span-2 space-y-4">
-        {/* Header de sesión */}
+        {/* Header de sesión mejorado */}
         <div className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-lg shadow">
           <div className="flex items-center space-x-4">
             <Badge className={`${
+              isPaused ? 'bg-orange-100 text-orange-700' :
               callStatus === 'connected' ? 'bg-green-100 text-green-700 animate-pulse' :
               callStatus === 'ringing' ? 'bg-yellow-100 text-yellow-700 animate-pulse' :
               'bg-gray-100 text-gray-700'
             }`}>
-              {callStatus === 'connected' && '🔴 EN VIVO'}
+              {isPaused && '⏸️ PAUSADO'}
+              {!isPaused && callStatus === 'connected' && '🔴 EN VIVO'}
               {callStatus === 'ringing' && '📞 CONECTANDO'}
               {callStatus === 'connecting' && '⏳ INICIANDO'}
             </Badge>
             <div className="text-sm">
               <div><strong>Duración:</strong> {Math.floor(sessionTime / 60)}:{(sessionTime % 60).toString().padStart(2, '0')}</div>
+              <div><strong>Mensajes:</strong> {messages.length}</div>
             </div>
           </div>
           
           <div className="flex space-x-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={togglePause}
+              className={isPaused ? 'bg-green-50 text-green-600' : 'bg-orange-50 text-orange-600'}
+            >
+              {isPaused ? (
+                <>
+                  <Play className="h-4 w-4 mr-2" />
+                  Reanudar
+                </>
+              ) : (
+                <>
+                  <Pause className="h-4 w-4 mr-2" />
+                  Pausar
+                </>
+              )}
+            </Button>
+
             {config.interactionMode === 'call' && (
               <Button
                 variant="outline"
                 size="sm"
                 onClick={toggleMicrophone}
+                disabled={isPaused}
                 className={isListening ? 'bg-red-50 text-red-600' : ''}
               >
                 {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
@@ -416,6 +521,7 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
               variant="outline"
               size="sm"
               onClick={() => setAudioEnabled(!audioEnabled)}
+              disabled={isPaused}
             >
               {audioEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
             </Button>
@@ -434,41 +540,45 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
               <CardContent className="flex-1 p-6">
                 <div className="h-full flex flex-col items-center justify-center space-y-6">
                   <div className="text-center">
-                    <div className="text-xl font-medium mb-2">Cliente Virtual Activo</div>
+                    <div className="text-xl font-medium mb-2">
+                      {isPaused ? 'Sesión Pausada' : 'Cliente Virtual Activo'}
+                    </div>
                     <div className="text-gray-600 dark:text-gray-400">
-                      {isSpeaking ? "El cliente está hablando..." : 
+                      {isPaused ? "Presiona Reanudar para continuar" :
+                       isSpeaking ? "El cliente está hablando..." : 
                        isListening ? "Puedes responder ahora..." : 
                        "Conversación en pausa"}
                     </div>
                   </div>
 
-                  {/* Animación de ondas de audio */}
+                  {/* Animación de ondas de audio mejorada */}
                   <div className="flex items-center justify-center space-x-1">
                     {[...Array(5)].map((_, i) => (
                       <div
                         key={i}
-                        className={`w-2 bg-purple-600 rounded-full transition-all duration-300 ${
-                          isSpeaking 
-                            ? `h-12 animate-pulse` 
-                            : isListening 
-                              ? `h-8 animate-bounce` 
-                              : 'h-4'
+                        className={`w-2 rounded-full transition-all duration-300 ${
+                          isPaused ? 'bg-orange-400 h-4' :
+                          isSpeaking ? 'bg-purple-600 h-12 animate-pulse' : 
+                          isListening ? 'bg-green-600 h-8 animate-bounce' : 
+                          'bg-gray-400 h-4'
                         }`}
                         style={{ animationDelay: `${i * 0.1}s` }}
                       />
                     ))}
                   </div>
 
-                  <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg text-center max-w-md">
-                    <div className="text-blue-600 dark:text-blue-400 text-sm mb-2">
-                      💡 Comandos útiles:
+                  {!isPaused && (
+                    <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg text-center max-w-md">
+                      <div className="text-blue-600 dark:text-blue-400 text-sm mb-2">
+                        💡 Comandos útiles:
+                      </div>
+                      <div className="text-xs text-blue-700 dark:text-blue-300 space-y-1">
+                        <div>• "Dame feedback" - Para recibir evaluación intermedia</div>
+                        <div>• "¿Cómo lo estoy haciendo?" - Para conocer tu progreso</div>
+                        <div>• "Terminemos aquí" - Para finalizar la sesión</div>
+                      </div>
                     </div>
-                    <div className="text-xs text-blue-700 dark:text-blue-300 space-y-1">
-                      <div>• "Dame feedback" - Para recibir evaluación intermedia</div>
-                      <div>• "¿Cómo lo estoy haciendo?" - Para conocer tu progreso</div>
-                      <div>• "Terminemos aquí" - Para finalizar la sesión</div>
-                    </div>
-                  </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -487,7 +597,7 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
         {/* Evaluación en tiempo real */}
         <RealTimeEvaluation
           metrics={realTimeMetrics}
-          isActive={isActive}
+          isActive={isActive && !isPaused}
           sessionDuration={sessionTime}
           onRequestFeedback={requestFeedback}
         />

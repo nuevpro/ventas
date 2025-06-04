@@ -1,204 +1,209 @@
 
 import React, { useState } from 'react';
-import { ArrowLeft } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Play, History, Settings, Mic, MessageSquare } from 'lucide-react';
 import ScenarioSelector from '@/components/ScenarioSelector';
-import ScenarioPreview from '@/components/training/ScenarioPreview';
 import LiveTrainingInterface from '@/components/training/LiveTrainingInterface';
-import DetailedEvaluation from '@/components/training/DetailedEvaluation';
-import ProgressDashboard from '@/components/training/ProgressDashboard';
-import AdaptiveLearning from '@/components/training/AdaptiveLearning';
-
-interface Scenario {
-  id: string;
-  title: string;
-  description: string;
-  category: 'sales' | 'education' | 'recruitment' | 'onboarding';
-  difficulty: 'beginner' | 'intermediate' | 'advanced';
-  duration: string;
-  objectives: string[];
-}
+import EvaluationResults from '@/components/EvaluationResults';
+import VoiceLibrary from '@/components/audio/VoiceLibrary';
+import SessionHistory from '@/components/training/SessionHistory';
+import BehaviorManager from '@/components/behaviors/BehaviorManager';
 
 const Training = () => {
-  const [currentView, setCurrentView] = useState<'dashboard' | 'adaptive' | 'selector' | 'preview' | 'training' | 'results'>('dashboard');
-  const [selectedScenario, setSelectedScenario] = useState<Scenario | null>(null);
+  const [currentView, setCurrentView] = useState('setup');
+  const [selectedScenario, setSelectedScenario] = useState(null);
+  const [selectedVoice, setSelectedVoice] = useState('EXAVITQu4vr4xnSDxMaL'); // Sarah por defecto
+  const [selectedVoiceName, setSelectedVoiceName] = useState('Sarah');
+  const [interactionMode, setInteractionMode] = useState('call');
   const [trainingConfig, setTrainingConfig] = useState(null);
-  const [evaluationData, setEvaluationData] = useState(null);
+  const [evaluationResults, setEvaluationResults] = useState(null);
 
-  const handleSelectScenario = (scenario: Scenario) => {
+  const handleScenarioSelect = (scenario: any) => {
     setSelectedScenario(scenario);
-    setCurrentView('preview');
   };
 
-  const handleStartTraining = (config: any) => {
+  const handleVoiceSelect = (voiceId: string, voiceName: string) => {
+    setSelectedVoice(voiceId);
+    setSelectedVoiceName(voiceName);
+  };
+
+  const startTraining = () => {
+    if (!selectedScenario) return;
+
+    const config = {
+      scenario: selectedScenario.id,
+      scenarioTitle: selectedScenario.title,
+      clientEmotion: selectedScenario.clientEmotion || 'neutral',
+      interactionMode,
+      selectedVoice,
+      selectedVoiceName,
+      behaviors: selectedScenario.behaviors || {}
+    };
+
     setTrainingConfig(config);
     setCurrentView('training');
   };
 
   const handleTrainingComplete = (evaluation: any) => {
-    setEvaluationData(evaluation);
+    setEvaluationResults(evaluation);
     setCurrentView('results');
   };
 
-  const handleRetry = () => {
-    setCurrentView('preview');
-    setEvaluationData(null);
+  const resetTraining = () => {
+    setCurrentView('setup');
+    setTrainingConfig(null);
+    setEvaluationResults(null);
   };
 
-  const handleNextLevel = () => {
-    setCurrentView('selector');
-    setSelectedScenario(null);
-    setEvaluationData(null);
-  };
-
-  const handleViewHistory = () => {
-    // Navegar al historial
-    window.location.href = '/history';
-  };
-
-  const handleBackToSelector = () => {
-    if (currentView === 'preview') {
-      setCurrentView('selector');
-      setSelectedScenario(null);
-    } else {
-      setCurrentView('dashboard');
-      setSelectedScenario(null);
-      setTrainingConfig(null);
-      setEvaluationData(null);
-    }
-  };
-
-  const renderNavigation = () => {
-    if (currentView === 'dashboard') return null;
-
+  if (currentView === 'training' && trainingConfig) {
     return (
-      <div className="mb-6">
-        <Button variant="outline" onClick={handleBackToSelector}>
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          {currentView === 'preview' ? 'Volver a escenarios' : 'Volver al dashboard'}
-        </Button>
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
+        <LiveTrainingInterface
+          config={trainingConfig}
+          onComplete={handleTrainingComplete}
+          onBack={resetTraining}
+        />
       </div>
     );
-  };
+  }
 
-  const renderHeader = () => {
-    const titles = {
-      dashboard: 'Dashboard de Entrenamiento',
-      adaptive: 'Aprendizaje Adaptativo',
-      selector: 'Seleccionar Escenario',
-      preview: selectedScenario?.title || 'Vista Previa',
-      training: 'Entrenamiento en Vivo',
-      results: 'Resultados de Evaluación'
-    };
-
-    const descriptions = {
-      dashboard: 'Revisa tu progreso y estadísticas de entrenamiento',
-      adaptive: 'Rutas personalizadas basadas en tu desempeño',
-      selector: 'Elige un escenario para comenzar tu entrenamiento',
-      preview: 'Configura tu sesión de entrenamiento antes de comenzar',
-      training: 'Practica tus habilidades en tiempo real',
-      results: 'Analiza tu desempeño y áreas de mejora'
-    };
-
+  if (currentView === 'results' && evaluationResults) {
     return (
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-          {titles[currentView]}
-        </h1>
-        <p className="text-gray-600 dark:text-gray-400">
-          {descriptions[currentView]}
-        </p>
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
+        <EvaluationResults
+          results={evaluationResults}
+          onStartNew={resetTraining}
+          onBack={resetTraining}
+        />
       </div>
     );
-  };
+  }
 
   return (
-    <div className="p-6 bg-gray-50 dark:bg-gray-900 min-h-screen">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
       <div className="max-w-7xl mx-auto">
-        {renderNavigation()}
-        {renderHeader()}
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+            Centro de Entrenamiento
+          </h1>
+          <p className="text-gray-600 dark:text-gray-400">
+            Configura y realiza sesiones de entrenamiento con IA
+          </p>
+        </div>
 
-        {/* Dashboard principal */}
-        {currentView === 'dashboard' && (
-          <div className="space-y-6">
-            <ProgressDashboard />
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Button
-                size="lg"
-                className="h-32 flex flex-col items-center justify-center space-y-2"
-                onClick={() => setCurrentView('selector')}
-              >
-                <div className="text-2xl">🎯</div>
-                <div className="text-center">
-                  <div className="font-semibold">Nuevo Entrenamiento</div>
-                  <div className="text-xs opacity-75">Practica un escenario</div>
-                </div>
-              </Button>
-              
-              <Button
-                variant="outline"
-                size="lg"
-                className="h-32 flex flex-col items-center justify-center space-y-2"
-                onClick={() => setCurrentView('adaptive')}
-              >
-                <div className="text-2xl">🧠</div>
-                <div className="text-center">
-                  <div className="font-semibold">IA Personalizada</div>
-                  <div className="text-xs opacity-75">Rutas adaptativas</div>
-                </div>
-              </Button>
-              
-              <Button
-                variant="outline"
-                size="lg"
-                className="h-32 flex flex-col items-center justify-center space-y-2"
-                onClick={handleViewHistory}
-              >
-                <div className="text-2xl">📊</div>
-                <div className="text-center">
-                  <div className="font-semibold">Ver Historial</div>
-                  <div className="text-xs opacity-75">Sesiones pasadas</div>
-                </div>
-              </Button>
+        <Tabs defaultValue="setup" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="setup">Configuración</TabsTrigger>
+            <TabsTrigger value="voices">Voces</TabsTrigger>
+            <TabsTrigger value="behaviors">Comportamientos</TabsTrigger>
+            <TabsTrigger value="history">Historial</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="setup" className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Selector de Escenario */}
+              <div className="lg:col-span-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Seleccionar Escenario</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ScenarioSelector
+                      selectedScenario={selectedScenario}
+                      onScenarioSelect={handleScenarioSelect}
+                    />
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Configuración de Entrenamiento */}
+              <div className="space-y-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Modo de Interacción</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button
+                        variant={interactionMode === 'call' ? 'default' : 'outline'}
+                        onClick={() => setInteractionMode('call')}
+                        className="flex flex-col items-center p-4 h-auto"
+                      >
+                        <Mic className="h-6 w-6 mb-2" />
+                        <span>Llamada</span>
+                      </Button>
+                      <Button
+                        variant={interactionMode === 'chat' ? 'default' : 'outline'}
+                        onClick={() => setInteractionMode('chat')}
+                        className="flex flex-col items-center p-4 h-auto"
+                      >
+                        <MessageSquare className="h-6 w-6 mb-2" />
+                        <span>Chat</span>
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Voz Seleccionada</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-center">
+                      <div className="text-lg font-medium mb-2">{selectedVoiceName}</div>
+                      <div className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                        Voz para el cliente virtual
+                      </div>
+                      <Button variant="outline" size="sm">
+                        <Settings className="h-4 w-4 mr-2" />
+                        Cambiar en la pestaña Voces
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Button
+                  onClick={startTraining}
+                  disabled={!selectedScenario}
+                  className="w-full"
+                  size="lg"
+                >
+                  <Play className="h-5 w-5 mr-2" />
+                  Iniciar Entrenamiento
+                </Button>
+              </div>
             </div>
-          </div>
-        )}
+          </TabsContent>
 
-        {/* Aprendizaje adaptativo */}
-        {currentView === 'adaptive' && <AdaptiveLearning />}
+          <TabsContent value="voices">
+            <Card>
+              <CardContent className="p-6">
+                <VoiceLibrary
+                  selectedVoice={selectedVoice}
+                  onVoiceSelect={handleVoiceSelect}
+                />
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-        {/* Selector de escenarios */}
-        {currentView === 'selector' && (
-          <ScenarioSelector onSelectScenario={handleSelectScenario} />
-        )}
+          <TabsContent value="behaviors">
+            <Card>
+              <CardContent className="p-6">
+                <BehaviorManager />
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-        {/* Vista previa del escenario */}
-        {currentView === 'preview' && selectedScenario && (
-          <ScenarioPreview
-            scenario={selectedScenario}
-            onStart={handleStartTraining}
-            onBack={handleBackToSelector}
-          />
-        )}
-
-        {/* Interfaz de entrenamiento en vivo */}
-        {currentView === 'training' && trainingConfig && (
-          <LiveTrainingInterface
-            config={trainingConfig}
-            onComplete={handleTrainingComplete}
-            onBack={handleBackToSelector}
-          />
-        )}
-
-        {/* Resultados detallados */}
-        {currentView === 'results' && evaluationData && (
-          <DetailedEvaluation
-            evaluation={evaluationData}
-            onRetry={handleRetry}
-            onNextLevel={handleNextLevel}
-            onViewHistory={handleViewHistory}
-          />
-        )}
+          <TabsContent value="history">
+            <Card>
+              <CardContent className="p-6">
+                <SessionHistory />
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );

@@ -69,6 +69,44 @@ export type Database = {
         }
         Relationships: []
       }
+      conversation_messages: {
+        Row: {
+          audio_url: string | null
+          content: string
+          created_at: string | null
+          id: string
+          sender: string
+          session_id: string | null
+          timestamp_in_session: number
+        }
+        Insert: {
+          audio_url?: string | null
+          content: string
+          created_at?: string | null
+          id?: string
+          sender: string
+          session_id?: string | null
+          timestamp_in_session: number
+        }
+        Update: {
+          audio_url?: string | null
+          content?: string
+          created_at?: string | null
+          id?: string
+          sender?: string
+          session_id?: string | null
+          timestamp_in_session?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversation_messages_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "training_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       knowledge_base: {
         Row: {
           campaign_id: string | null
@@ -143,6 +181,38 @@ export type Database = {
         }
         Relationships: []
       }
+      real_time_metrics: {
+        Row: {
+          id: string
+          metric_name: string
+          metric_value: number
+          recorded_at: string | null
+          session_id: string | null
+        }
+        Insert: {
+          id?: string
+          metric_name: string
+          metric_value: number
+          recorded_at?: string | null
+          session_id?: string | null
+        }
+        Update: {
+          id?: string
+          metric_name?: string
+          metric_value?: number
+          recorded_at?: string | null
+          session_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "real_time_metrics_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "training_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       scenarios: {
         Row: {
           campaign_id: string | null
@@ -189,6 +259,59 @@ export type Database = {
             columns: ["campaign_id"]
             isOneToOne: false
             referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      session_evaluations: {
+        Row: {
+          accuracy_score: number | null
+          ai_analysis: Json | null
+          clarity_score: number | null
+          created_at: string | null
+          empathy_score: number | null
+          id: string
+          improvements: string[] | null
+          overall_score: number | null
+          rapport_score: number | null
+          session_id: string | null
+          specific_feedback: string | null
+          strengths: string[] | null
+        }
+        Insert: {
+          accuracy_score?: number | null
+          ai_analysis?: Json | null
+          clarity_score?: number | null
+          created_at?: string | null
+          empathy_score?: number | null
+          id?: string
+          improvements?: string[] | null
+          overall_score?: number | null
+          rapport_score?: number | null
+          session_id?: string | null
+          specific_feedback?: string | null
+          strengths?: string[] | null
+        }
+        Update: {
+          accuracy_score?: number | null
+          ai_analysis?: Json | null
+          clarity_score?: number | null
+          created_at?: string | null
+          empathy_score?: number | null
+          id?: string
+          improvements?: string[] | null
+          overall_score?: number | null
+          rapport_score?: number | null
+          session_id?: string | null
+          specific_feedback?: string | null
+          strengths?: string[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "session_evaluations_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "training_sessions"
             referencedColumns: ["id"]
           },
         ]
