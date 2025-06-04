@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Save, TestTube, Volume2, User, Globe, Users, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -10,96 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-
-// Voice interface for type safety
-interface Voice {
-  id: string;
-  name: string;
-  age: string;
-  accent: string;
-  description: string;
-}
-
-// Comprehensive ElevenLabs voice database organized by categories
-const ELEVENLABS_VOICES = {
-  english: {
-    male: {
-      young: [
-        { id: 'pNInz6obpgDQGcFmaJgB', name: 'Adam', age: '20-30', accent: 'American', description: 'Joven americano, casual' },
-        { id: 'VR6AewLTigWG4xSOukaG', name: 'Arnold', age: '25-35', accent: 'American', description: 'Joven profesional americano' },
-        { id: 'ErXwobaYiN019PkySvjV', name: 'Antoni', age: '25-30', accent: 'American', description: 'Joven americano, enérgico' },
-      ] as Voice[],
-      middle: [
-        { id: 'JBFqnCBsd6RMkjVDRZzb', name: 'George', age: '35-45', accent: 'British', description: 'Ejecutivo británico maduro' },
-        { id: 'onwK4e9ZLuTAKqWW03F9', name: 'Daniel', age: '40-50', accent: 'British', description: 'Autoritativo británico' },
-        { id: 'CwhRBWXzGAHq8TQ4Fs17', name: 'Roger', age: '45-55', accent: 'American', description: 'Maduro americano profesional' },
-        { id: 'bIHbv24MWmeRgasZH58o', name: 'Will', age: '35-45', accent: 'American', description: 'Profesional americano' },
-      ] as Voice[],
-      elderly: [
-        { id: 'cgSgspJ2msm6clMCkdW9', name: 'Marcus', age: '55-65', accent: 'British', description: 'Mayor británico distinguido' },
-        { id: 'cjVigY5qzO86Huf0OWal', name: 'Eric', age: '60-70', accent: 'American', description: 'Mayor americano sabio' },
-      ] as Voice[]
-    },
-    female: {
-      young: [
-        { id: '9BWtsMINqrJLrRacOk9x', name: 'Aria', age: '20-30', accent: 'American', description: 'Joven americana natural' },
-        { id: 'pFZP5JQG7iQjIQuC4Bku', name: 'Lily', age: '25-30', accent: 'British', description: 'Joven británica elegante' },
-        { id: 'XrExE9yKIg1WjnnlVkGX', name: 'Matilda', age: '20-28', accent: 'British', description: 'Joven británica sofisticada' },
-      ] as Voice[],
-      middle: [
-        { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Sarah', age: '30-40', accent: 'American', description: 'Profesional americana' },
-        { id: 'XB0fDUnXU5powFXDhCwa', name: 'Charlotte', age: '35-45', accent: 'British', description: 'Ejecutiva británica amigable' },
-        { id: 'cgSgspJ2msm6clMCkdW9', name: 'Jessica', age: '30-40', accent: 'American', description: 'Profesional americana versátil' },
-      ] as Voice[],
-      elderly: [
-        { id: 'FGY2WhTYpPnrIDTdsKH5', name: 'Laura', age: '50-60', accent: 'American', description: 'Madura americana distinguida' },
-        { id: 'Xb7hH8MSUJpSbSDYk0k2', name: 'Alice', age: '55-65', accent: 'British', description: 'Mayor británica refinada' },
-      ] as Voice[]
-    }
-  },
-  spanish: {
-    male: [
-      { id: 'g5CIjZEefAph4nQFvHAz', name: 'Diego', age: '30-40', accent: 'Mexican', description: 'Profesional mexicano' },
-      { id: 'XrExE9yKIg1WjnnlVkGX', name: 'Carlos', age: '35-45', accent: 'Spanish', description: 'Ejecutivo español' },
-      { id: 'TX3LPaxmHKxFdv7VOQHJ', name: 'Miguel', age: '25-35', accent: 'Colombian', description: 'Joven colombiano' },
-    ] as Voice[],
-    female: [
-      { id: 'IKne3meq5aSn9XLyUdCD', name: 'Sofia', age: '25-35', accent: 'Mexican', description: 'Joven mexicana profesional' },
-      { id: 'N2lVS1w4EtoT3dr4eOWO', name: 'Carmen', age: '30-40', accent: 'Spanish', description: 'Ejecutiva española' },
-      { id: 'SAz9YHcvj6GT2YYXdXww', name: 'Lucia', age: '28-38', accent: 'Argentinian', description: 'Profesional argentina' },
-    ] as Voice[]
-  },
-  french: {
-    male: [
-      { id: 'nPczCjzI2devNBz1zQrb', name: 'Pierre', age: '35-45', accent: 'Parisian', description: 'Ejecutivo parisino' },
-      { id: 'iP95p4xoKVk53GoZ742B', name: 'Jean', age: '40-50', accent: 'French', description: 'Profesional francés maduro' },
-    ] as Voice[],
-    female: [
-      { id: 'pqHfZKP75CvOlQylNhV4', name: 'Marie', age: '30-40', accent: 'Parisian', description: 'Ejecutiva parisina' },
-      { id: 'TX3LPaxmHKxFdv7VOQHJ', name: 'Camille', age: '25-35', accent: 'French', description: 'Joven francesa profesional' },
-    ] as Voice[]
-  },
-  german: {
-    male: [
-      { id: 'pNInz6obpgDQGcFmaJgB', name: 'Hans', age: '40-50', accent: 'German', description: 'Ejecutivo alemán' },
-      { id: 'VR6AewLTigWG4xSOukaG', name: 'Klaus', age: '35-45', accent: 'Austrian', description: 'Profesional austriaco' },
-    ] as Voice[],
-    female: [
-      { id: 'ErXwobaYiN019PkySvjV', name: 'Greta', age: '30-40', accent: 'German', description: 'Ejecutiva alemana' },
-      { id: 'cgSgspJ2msm6clMCkdW9', name: 'Ingrid', age: '35-45', accent: 'Swiss', description: 'Profesional suiza' },
-    ] as Voice[]
-  },
-  italian: {
-    male: [
-      { id: 'onwK4e9ZLuTAKqWW03F9', name: 'Marco', age: '30-40', accent: 'Italian', description: 'Ejecutivo italiano' },
-      { id: 'CwhRBWXzGAHq8TQ4Fs17', name: 'Giuseppe', age: '45-55', accent: 'Roman', description: 'Profesional romano maduro' },
-    ] as Voice[],
-    female: [
-      { id: 'XB0fDUnXU5powFXDhCwa', name: 'Giulia', age: '28-38', accent: 'Italian', description: 'Ejecutiva italiana' },
-      { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Francesca', age: '32-42', accent: 'Milanese', description: 'Profesional milanesa' },
-    ] as Voice[]
-  }
-};
+import { getAllVoiceProfiles } from '@/utils/randomVoiceSelector';
 
 const ELEVENLABS_MODELS = [
   { id: 'eleven_multilingual_v2', name: 'Multilingual v2', description: 'Más realista, emocional (29 idiomas)', latency: 'Alta calidad' },
@@ -120,58 +32,51 @@ const ElevenLabsConfig = () => {
     callIntroMessage: 'Hola, gracias por contactarnos. Mi nombre es {name} y estaré ayudándole hoy.',
     interruptionSensitivity: 0.7,
   });
-  const [selectedLanguage, setSelectedLanguage] = useState('english');
-  const [selectedGender, setSelectedGender] = useState('female');
-  const [selectedAge, setSelectedAge] = useState('middle');
   const [testText, setTestText] = useState('Hola, esta es una prueba de la configuración de voz.');
   const [isLoading, setIsLoading] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const { toast } = useToast();
 
-  const getVoicesByCategory = (): Voice[] => {
-    const lang = ELEVENLABS_VOICES[selectedLanguage as keyof typeof ELEVENLABS_VOICES];
-    if (!lang) return [];
-    
-    if (selectedLanguage === 'english') {
-      const englishLang = lang as typeof ELEVENLABS_VOICES.english;
-      const gender = englishLang[selectedGender as keyof typeof englishLang];
-      return gender?.[selectedAge as keyof typeof gender] || [];
-    } else {
-      const otherLang = lang as typeof ELEVENLABS_VOICES.spanish;
-      return otherLang[selectedGender as keyof typeof otherLang] || [];
-    }
-  };
+  const voiceProfiles = getAllVoiceProfiles();
 
-  const getAllVoices = (): (Voice & { language: string; gender: string; age?: string })[] => {
-    const allVoices: (Voice & { language: string; gender: string; age?: string })[] = [];
-    Object.entries(ELEVENLABS_VOICES).forEach(([lang, langData]) => {
-      if (lang === 'english') {
-        const englishData = langData as typeof ELEVENLABS_VOICES.english;
-        Object.entries(englishData).forEach(([gender, genderData]) => {
-          Object.entries(genderData).forEach(([age, voices]) => {
-            allVoices.push(...voices.map(v => ({ ...v, language: lang, gender, age })));
-          });
-        });
-      } else {
-        const otherData = langData as typeof ELEVENLABS_VOICES.spanish;
-        Object.entries(otherData).forEach(([gender, voices]) => {
-          allVoices.push(...voices.map(v => ({ ...v, language: lang, gender })));
-        });
+  // Cargar configuración al montar el componente
+  useEffect(() => {
+    const loadConfig = () => {
+      try {
+        const savedConfig = localStorage.getItem('elevenLabsConfig');
+        if (savedConfig) {
+          const parsed = JSON.parse(savedConfig);
+          setConfig(prev => ({ ...prev, ...parsed }));
+          console.log('Configuración cargada:', parsed);
+        }
+      } catch (error) {
+        console.error('Error cargando configuración:', error);
       }
+    };
+    
+    loadConfig();
+  }, []);
+
+  const handleConfigChange = (key: string, value: any) => {
+    setConfig(prev => {
+      const newConfig = { ...prev, [key]: value };
+      console.log('Actualizando configuración:', key, value);
+      return newConfig;
     });
-    return allVoices;
   };
 
   const handleSaveConfig = async () => {
     setIsLoading(true);
     try {
       localStorage.setItem('elevenLabsConfig', JSON.stringify(config));
+      console.log('Configuración guardada:', config);
       
       toast({
         title: "Configuración guardada",
         description: "La configuración de ElevenLabs se ha guardado correctamente.",
       });
     } catch (error) {
+      console.error('Error guardando configuración:', error);
       toast({
         title: "Error",
         description: "No se pudo guardar la configuración.",
@@ -187,11 +92,11 @@ const ElevenLabsConfig = () => {
     
     setIsTesting(true);
     try {
-      const selectedVoice = getAllVoices().find(v => v.id === config.defaultVoice);
+      const selectedVoice = voiceProfiles.find(v => v.id === config.defaultVoice);
       const { data, error } = await supabase.functions.invoke('text-to-speech', {
         body: {
           text: testText,
-          voice: selectedVoice?.name || 'Sarah',
+          voice: config.defaultVoice,
           model: config.defaultModel,
           settings: {
             stability: config.stability,
@@ -211,7 +116,7 @@ const ElevenLabsConfig = () => {
         
         toast({
           title: "Prueba exitosa",
-          description: "El audio se ha generado y reproducido correctamente.",
+          description: `Audio generado con ${selectedVoice?.name || 'voz seleccionada'}`,
         });
       }
     } catch (error) {
@@ -225,13 +130,6 @@ const ElevenLabsConfig = () => {
       setIsTesting(false);
     }
   };
-
-  useEffect(() => {
-    const savedConfig = localStorage.getItem('elevenLabsConfig');
-    if (savedConfig) {
-      setConfig(JSON.parse(savedConfig));
-    }
-  }, []);
 
   return (
     <div className="space-y-6">
@@ -247,63 +145,15 @@ const ElevenLabsConfig = () => {
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
                 <Globe className="h-5 w-5" />
-                <span>Catálogo de Voces ElevenLabs</span>
+                <span>Catálogo de Voces</span>
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Language and Category Filters */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label>Idioma</Label>
-                  <Select value={selectedLanguage} onValueChange={setSelectedLanguage}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="english">🇺🇸 Inglés</SelectItem>
-                      <SelectItem value="spanish">🇪🇸 Español</SelectItem>
-                      <SelectItem value="french">🇫🇷 Francés</SelectItem>
-                      <SelectItem value="german">🇩🇪 Alemán</SelectItem>
-                      <SelectItem value="italian">🇮🇹 Italiano</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Género</Label>
-                  <Select value={selectedGender} onValueChange={setSelectedGender}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="male">👨 Masculino</SelectItem>
-                      <SelectItem value="female">👩 Femenino</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {selectedLanguage === 'english' && (
-                  <div className="space-y-2">
-                    <Label>Edad</Label>
-                    <Select value={selectedAge} onValueChange={setSelectedAge}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="young">🧑 Joven (20-30)</SelectItem>
-                        <SelectItem value="middle">👨‍💼 Adulto (30-50)</SelectItem>
-                        <SelectItem value="elderly">👴 Mayor (50+)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-              </div>
-
               {/* Voice Selection */}
               <div className="space-y-4">
-                <Label>Seleccionar Voz</Label>
+                <Label>Seleccionar Voz Principal</Label>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {getVoicesByCategory().map((voice) => (
+                  {voiceProfiles.map((voice) => (
                     <div
                       key={voice.id}
                       className={`p-4 border rounded-lg cursor-pointer transition-all ${
@@ -311,7 +161,7 @@ const ElevenLabsConfig = () => {
                           ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20' 
                           : 'border-gray-200 hover:border-gray-300'
                       }`}
-                      onClick={() => setConfig(prev => ({ ...prev, defaultVoice: voice.id }))}
+                      onClick={() => handleConfigChange('defaultVoice', voice.id)}
                     >
                       <div className="flex items-center space-x-3">
                         <User className="h-8 w-8 text-gray-500" />
@@ -320,7 +170,7 @@ const ElevenLabsConfig = () => {
                           <p className="text-sm text-gray-500">{voice.description}</p>
                           <div className="flex space-x-2 mt-1">
                             <Badge variant="outline" className="text-xs">
-                              {voice.age}
+                              {voice.gender}
                             </Badge>
                             <Badge variant="outline" className="text-xs">
                               {voice.accent}
@@ -348,9 +198,12 @@ const ElevenLabsConfig = () => {
               {/* Model Selection */}
               <div className="space-y-2">
                 <Label>Modelo de IA</Label>
-                <Select value={config.defaultModel} onValueChange={(value) => setConfig(prev => ({ ...prev, defaultModel: value }))}>
+                <Select 
+                  value={config.defaultModel} 
+                  onValueChange={(value) => handleConfigChange('defaultModel', value)}
+                >
                   <SelectTrigger>
-                    <SelectValue />
+                    <SelectValue placeholder="Seleccionar modelo" />
                   </SelectTrigger>
                   <SelectContent>
                     {ELEVENLABS_MODELS.map((model) => (
@@ -366,58 +219,59 @@ const ElevenLabsConfig = () => {
               </div>
 
               {/* Voice Settings */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <Label>Estabilidad ({config.stability})</Label>
+                  <Label>Estabilidad: {config.stability.toFixed(1)}</Label>
                   <input
                     type="range"
                     min="0"
                     max="1"
                     step="0.1"
                     value={config.stability}
-                    onChange={(e) => setConfig(prev => ({ ...prev, stability: parseFloat(e.target.value) }))}
-                    className="w-full"
+                    onChange={(e) => handleConfigChange('stability', parseFloat(e.target.value))}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
                   />
                   <p className="text-xs text-gray-500">Mayor estabilidad = menos variación emocional</p>
                 </div>
                 
                 <div className="space-y-2">
-                  <Label>Similitud ({config.similarityBoost})</Label>
+                  <Label>Similitud: {config.similarityBoost.toFixed(1)}</Label>
                   <input
                     type="range"
                     min="0"
                     max="1"
                     step="0.1"
                     value={config.similarityBoost}
-                    onChange={(e) => setConfig(prev => ({ ...prev, similarityBoost: parseFloat(e.target.value) }))}
-                    className="w-full"
+                    onChange={(e) => handleConfigChange('similarityBoost', parseFloat(e.target.value))}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
                   />
                   <p className="text-xs text-gray-500">Mayor similitud = más fidelidad a la voz original</p>
                 </div>
                 
                 <div className="space-y-2">
-                  <Label>Estilo ({config.style})</Label>
+                  <Label>Estilo: {config.style.toFixed(1)}</Label>
                   <input
                     type="range"
                     min="0"
                     max="1"
                     step="0.1"
                     value={config.style}
-                    onChange={(e) => setConfig(prev => ({ ...prev, style: parseFloat(e.target.value) }))}
-                    className="w-full"
+                    onChange={(e) => handleConfigChange('style', parseFloat(e.target.value))}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
                   />
                   <p className="text-xs text-gray-500">Mayor estilo = más expresividad emocional</p>
                 </div>
                 
                 <div className="space-y-2">
-                  <Label className="flex items-center space-x-2">
+                  <div className="flex items-center space-x-2">
                     <input
                       type="checkbox"
+                      id="speakerBoost"
                       checked={config.useSpeakerBoost}
-                      onChange={(e) => setConfig(prev => ({ ...prev, useSpeakerBoost: e.target.checked }))}
+                      onChange={(e) => handleConfigChange('useSpeakerBoost', e.target.checked)}
                     />
-                    <span>Potenciador de Voz</span>
-                  </Label>
+                    <Label htmlFor="speakerBoost">Potenciador de Voz</Label>
+                  </div>
                   <p className="text-xs text-gray-500">Mejora la claridad y volumen</p>
                 </div>
               </div>
@@ -467,7 +321,7 @@ const ElevenLabsConfig = () => {
                   <input
                     type="checkbox"
                     checked={config.autoCallMode}
-                    onChange={(e) => setConfig(prev => ({ ...prev, autoCallMode: e.target.checked }))}
+                    onChange={(e) => handleConfigChange('autoCallMode', e.target.checked)}
                     id="autoCallMode"
                   />
                   <Label htmlFor="autoCallMode">Activar modo llamada automática</Label>
@@ -477,7 +331,7 @@ const ElevenLabsConfig = () => {
                   <Label>Mensaje de introducción</Label>
                   <Textarea
                     value={config.callIntroMessage}
-                    onChange={(e) => setConfig(prev => ({ ...prev, callIntroMessage: e.target.value }))}
+                    onChange={(e) => handleConfigChange('callIntroMessage', e.target.value)}
                     placeholder="Mensaje inicial automático..."
                     rows={2}
                   />
@@ -485,15 +339,15 @@ const ElevenLabsConfig = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Sensibilidad de interrupción ({config.interruptionSensitivity})</Label>
+                  <Label>Sensibilidad de interrupción: {config.interruptionSensitivity.toFixed(1)}</Label>
                   <input
                     type="range"
                     min="0.1"
                     max="1"
                     step="0.1"
                     value={config.interruptionSensitivity}
-                    onChange={(e) => setConfig(prev => ({ ...prev, interruptionSensitivity: parseFloat(e.target.value) }))}
-                    className="w-full"
+                    onChange={(e) => handleConfigChange('interruptionSensitivity', parseFloat(e.target.value))}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
                   />
                   <p className="text-xs text-gray-500">Mayor sensibilidad = la IA se interrumpe más fácilmente</p>
                 </div>
