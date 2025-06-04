@@ -3,49 +3,35 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
+import type { Database } from '@/integrations/supabase/types';
 
-interface SessionData {
-  id: string;
-  user_id: string;
-  scenario_id: string;
-  scenario_title: string;
-  client_emotion: string;
-  interaction_mode: string;
+// Use the actual database types
+type DbTrainingSession = Database['public']['Tables']['training_sessions']['Row'];
+type DbTrainingSessionInsert = Database['public']['Tables']['training_sessions']['Insert'];
+type DbTrainingSessionUpdate = Database['public']['Tables']['training_sessions']['Update'];
+type DbConversationMessage = Database['public']['Tables']['conversation_messages']['Row'];
+type DbSessionEvaluation = Database['public']['Tables']['session_evaluations']['Row'];
+
+// Extended interface for our application logic
+interface SessionData extends DbTrainingSession {
+  scenario_title?: string;
+  client_emotion?: string;
+  interaction_mode?: string;
   voice_used?: string;
-  session_status: string;
-  started_at: string;
+  session_status?: string;
+  started_at?: string;
   ended_at?: string;
-  duration_seconds: number;
-  total_messages: number;
-  user_words_count: number;
-  ai_words_count: number;
-  created_at: string;
-  updated_at: string;
+  duration_seconds?: number;
+  total_messages?: number;
+  user_words_count?: number;
+  ai_words_count?: number;
 }
 
-interface Message {
-  id: string;
-  session_id: string;
+interface Message extends DbConversationMessage {
   sender: 'user' | 'ai';
-  content: string;
-  timestamp_in_session: number;
-  audio_url?: string;
-  created_at: string;
 }
 
-interface SessionEvaluation {
-  id: string;
-  session_id: string;
-  rapport_score?: number;
-  clarity_score?: number;
-  empathy_score?: number;
-  accuracy_score?: number;
-  overall_score?: number;
-  strengths?: string[];
-  improvements?: string[];
-  specific_feedback?: string;
-  ai_analysis?: any;
-}
+interface SessionEvaluation extends DbSessionEvaluation {}
 
 export class SessionManager {
   private static instance: SessionManager;
@@ -77,19 +63,23 @@ export class SessionManager {
     }
 
     try {
-      const sessionData = {
+      // Create a session data object that matches the database schema
+      const sessionData: DbTrainingSessionInsert = {
         user_id: this.userId,
         scenario_id: config.scenario || 'default',
-        scenario_title: config.scenarioTitle || 'Entrenamiento General',
-        client_emotion: config.clientEmotion || 'neutral',
-        interaction_mode: config.interactionMode || 'call',
-        voice_used: config.selectedVoice || null,
-        session_status: 'in_progress',
-        started_at: new Date().toISOString(),
-        duration_seconds: 0,
-        total_messages: 0,
-        user_words_count: 0,
-        ai_words_count: 0
+        duration_minutes: 0,
+        score: 0,
+        conversation_log: {
+          scenario_title: config.scenarioTitle || 'Entrenamiento General',
+          client_emotion: config.clientEmotion || 'neutral',
+          interaction_mode: config.interactionMode || 'call',
+          voice_used: config.selectedVoice || null,
+          session_status: 'in_progress',
+          started_at: new Date().toISOString(),
+          total_messages: 0,
+          user_words_count: 0,
+          ai_words_count: 0
+        }
       };
 
       const { data, error } = await supabase
@@ -108,7 +98,20 @@ export class SessionManager {
         return null;
       }
 
-      this.currentSession = data as SessionData;
+      // Extend the session data with our application fields
+      this.currentSession = {
+        ...data,
+        scenario_title: (data.conversation_log as any)?.scenario_title,
+        client_emotion: (data.conversation_log as any)?.client_emotion,
+        interaction_mode: (data.conversation_log as any)?.interaction_mode,
+        voice_used: (data.conversation_log as any)?.voice_used,
+        session_status: (data.conversation_log as any)?.session_status,
+        started_at: (data.conversation_log as any)?.started_at,
+        total_messages: (data.conversation_log as any)?.total_messages || 0,
+        user_words_count: (data.conversation_log as any)?.user_words_count || 0,
+        ai_words_count: (data.conversation_log as any)?.ai_words_count || 0
+      };
+
       return data.id;
     } catch (error) {
       console.error('Error starting session:', error);
@@ -140,25 +143,31 @@ export class SessionManager {
         return false;
       }
 
-      // Actualizar contadores de la sesión
+      // Update session counters in conversation_log
       const wordCount = content.split(' ').length;
-      const updates: any = {
-        total_messages: this.currentSession.total_messages + 1,
+      const currentLog = this.currentSession.conversation_log as any || {};
+      
+      const updatedLog = {
+        ...currentLog,
+        total_messages: (this.currentSession.total_messages || 0) + 1,
+        user_words_count: sender === 'user' 
+          ? (this.currentSession.user_words_count || 0) + wordCount
+          : (this.currentSession.user_words_count || 0),
+        ai_words_count: sender === 'ai'
+          ? (this.currentSession.ai_words_count || 0) + wordCount
+          : (this.currentSession.ai_words_count || 0)
       };
-      
-      if (sender === 'user') {
-        updates.user_words_count = this.currentSession.user_words_count + wordCount;
-      } else {
-        updates.ai_words_count = this.currentSession.ai_words_count + wordCount;
-      }
-      
+
       await supabase
         .from('training_sessions')
-        .update(updates)
+        .update({ conversation_log: updatedLog })
         .eq('id', this.currentSession.id);
 
-      // Actualizar la sesión local
-      this.currentSession = { ...this.currentSession, ...updates };
+      // Update local session
+      this.currentSession.total_messages = updatedLog.total_messages;
+      this.currentSession.user_words_count = updatedLog.user_words_count;
+      this.currentSession.ai_words_count = updatedLog.ai_words_count;
+      this.currentSession.conversation_log = updatedLog;
 
       return true;
     } catch (error) {
@@ -188,20 +197,25 @@ export class SessionManager {
 
     try {
       const endTime = new Date();
-      const startTime = new Date(this.currentSession.started_at);
-      const durationSeconds = Math.floor((endTime.getTime() - startTime.getTime()) / 1000);
+      const startTime = new Date(this.currentSession.started_at || this.currentSession.created_at || new Date());
+      const durationMinutes = Math.floor((endTime.getTime() - startTime.getTime()) / (1000 * 60));
 
-      // Actualizar sesión
+      const currentLog = this.currentSession.conversation_log as any || {};
+      const updatedLog = {
+        ...currentLog,
+        session_status: 'completed',
+        ended_at: endTime.toISOString()
+      };
+
       await supabase
         .from('training_sessions')
         .update({
-          session_status: 'completed',
-          ended_at: endTime.toISOString(),
-          duration_seconds: durationSeconds
+          completed_at: endTime.toISOString(),
+          duration_minutes: durationMinutes,
+          conversation_log: updatedLog
         })
         .eq('id', this.currentSession.id);
 
-      // Guardar evaluación si existe
       if (evaluation) {
         await this.saveEvaluation(evaluation);
       }
@@ -257,7 +271,21 @@ export class SessionManager {
         return [];
       }
 
-      return (data || []) as SessionData[];
+      // Transform the data to include our extended fields
+      return (data || []).map(session => ({
+        ...session,
+        scenario_title: (session.conversation_log as any)?.scenario_title,
+        client_emotion: (session.conversation_log as any)?.client_emotion,
+        interaction_mode: (session.conversation_log as any)?.interaction_mode,
+        voice_used: (session.conversation_log as any)?.voice_used,
+        session_status: (session.conversation_log as any)?.session_status || 'completed',
+        started_at: (session.conversation_log as any)?.started_at,
+        ended_at: (session.conversation_log as any)?.ended_at,
+        duration_seconds: session.duration_minutes ? session.duration_minutes * 60 : 0,
+        total_messages: (session.conversation_log as any)?.total_messages || 0,
+        user_words_count: (session.conversation_log as any)?.user_words_count || 0,
+        ai_words_count: (session.conversation_log as any)?.ai_words_count || 0
+      })) as SessionData[];
     } catch (error) {
       console.error('Error fetching sessions:', error);
       return [];
@@ -277,7 +305,10 @@ export class SessionManager {
         return [];
       }
 
-      return (data || []) as Message[];
+      return (data || []).map(msg => ({
+        ...msg,
+        sender: msg.sender as 'user' | 'ai'
+      })) as Message[];
     } catch (error) {
       console.error('Error fetching messages:', error);
       return [];
