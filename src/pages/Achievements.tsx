@@ -28,7 +28,10 @@ const Achievements = () => {
     });
   };
 
-  const categories = ['all', ...new Set(availableAchievements.map(a => a.category).filter(Boolean))];
+  // Crear array de categorías con tipos correctos
+  const allCategories = availableAchievements.map(a => a.category).filter(Boolean) as string[];
+  const uniqueCategories = Array.from(new Set(allCategories));
+  const categories: string[] = ['all', ...uniqueCategories];
 
   if (loading) {
     return (
