@@ -150,19 +150,25 @@ const Training = () => {
                       </p>
                     </div>
                     
-                    {selectedScenario.expected_outcomes?.objectives && (
-                      <div>
-                        <h5 className="text-xs font-medium text-gray-500 mb-1">Objetivos:</h5>
-                        <ul className="space-y-1">
-                          {selectedScenario.expected_outcomes.objectives.map((objective: string, index: number) => (
-                            <li key={index} className="text-xs text-gray-600 dark:text-gray-400 flex items-center">
-                              <div className="w-1 h-1 bg-purple-600 rounded-full mr-2" />
-                              {objective}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
+                    {(() => {
+                      // Type guard para expected_outcomes
+                      const expectedOutcomes = selectedScenario.expected_outcomes as { objectives?: string[] } | null;
+                      const objectives = expectedOutcomes?.objectives || [];
+                      
+                      return objectives.length > 0 ? (
+                        <div>
+                          <h5 className="text-xs font-medium text-gray-500 mb-1">Objetivos:</h5>
+                          <ul className="space-y-1">
+                            {objectives.map((objective: string, index: number) => (
+                              <li key={index} className="text-xs text-gray-600 dark:text-gray-400 flex items-center">
+                                <div className="w-1 h-1 bg-purple-600 rounded-full mr-2" />
+                                {objective}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null;
+                    })()}
                   </div>
                 </CardContent>
               </Card>

@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Users, GraduationCap, Briefcase, MessageSquare, Handshake, HeadphonesIcon, Search, Play, Edit } from 'lucide-react';
+import { Users, GraduationCap, Briefcase, MessageSquare, Handshake, HeadphonesIcon, Search, Play, Edit, Plus } from 'lucide-react';
 import { useScenarios } from '@/hooks/useScenarios';
 import ScenarioDialog from './ScenarioDialog';
 import type { Database } from '@/integrations/supabase/types';
@@ -16,48 +16,48 @@ interface EnhancedScenarioSelectorProps {
   onSelectScenario: (scenario: Scenario) => void;
 }
 
+const categoryConfig = {
+  sales: {
+    label: 'Ventas',
+    icon: Users,
+    color: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
+  },
+  customer_service: {
+    label: 'Atención al Cliente',
+    icon: HeadphonesIcon,
+    color: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+  },
+  hr: {
+    label: 'Recursos Humanos',
+    icon: Briefcase,
+    color: 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300'
+  },
+  negotiation: {
+    label: 'Negociación',
+    icon: Handshake,
+    color: 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300'
+  },
+  education: {
+    label: 'Educación',
+    icon: GraduationCap,
+    color: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300'
+  },
+  recruitment: {
+    label: 'Reclutamiento',
+    icon: MessageSquare,
+    color: 'bg-pink-100 text-pink-700 dark:bg-pink-900 dark:text-pink-300'
+  },
+  onboarding: {
+    label: 'Onboarding',
+    icon: Users,
+    color: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300'
+  }
+};
+
 const EnhancedScenarioSelector = ({ onSelectScenario }: EnhancedScenarioSelectorProps) => {
   const { scenarios, loading, getScenariosByCategory, getCategories } = useScenarios();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
-
-  const categoryConfig = {
-    sales: {
-      label: 'Ventas',
-      icon: Users,
-      color: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
-    },
-    customer_service: {
-      label: 'Atención al Cliente',
-      icon: HeadphonesIcon,
-      color: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
-    },
-    hr: {
-      label: 'Recursos Humanos',
-      icon: Briefcase,
-      color: 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300'
-    },
-    negotiation: {
-      label: 'Negociación',
-      icon: Handshake,
-      color: 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300'
-    },
-    education: {
-      label: 'Educación',
-      icon: GraduationCap,
-      color: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300'
-    },
-    recruitment: {
-      label: 'Reclutamiento',
-      icon: MessageSquare,
-      color: 'bg-pink-100 text-pink-700 dark:bg-pink-900 dark:text-pink-300'
-    },
-    onboarding: {
-      label: 'Onboarding',
-      icon: Users,
-      color: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300'
-    }
-  };
 
   const getDifficultyColor = (difficulty: number) => {
     const colors = {
@@ -128,8 +128,12 @@ const EnhancedScenarioSelector = ({ onSelectScenario }: EnhancedScenarioSelector
         <TabsContent value={selectedCategory} className="mt-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredScenarios.map((scenario) => {
-              const categoryConfig = categoryConfig[scenario.scenario_type as keyof typeof categoryConfig];
-              const Icon = categoryConfig?.icon || Users;
+              const categoryInfo = categoryConfig[scenario.scenario_type as keyof typeof categoryConfig];
+              const Icon = categoryInfo?.icon || Users;
+
+              // Type guard para expected_outcomes
+              const expectedOutcomes = scenario.expected_outcomes as { objectives?: string[] } | null;
+              const objectives = expectedOutcomes?.objectives || [];
 
               return (
                 <Card key={scenario.id} className="hover:shadow-lg transition-shadow relative">
@@ -142,8 +146,8 @@ const EnhancedScenarioSelector = ({ onSelectScenario }: EnhancedScenarioSelector
                         <div className="flex-1 min-w-0">
                           <CardTitle className="text-base leading-tight">{scenario.title}</CardTitle>
                           <div className="flex flex-wrap gap-1 mt-2">
-                            <Badge className={categoryConfig?.color || 'bg-gray-100 text-gray-700'}>
-                              {categoryConfig?.label || scenario.scenario_type}
+                            <Badge className={categoryInfo?.color || 'bg-gray-100 text-gray-700'}>
+                              {categoryInfo?.label || scenario.scenario_type}
                             </Badge>
                             <Badge className={getDifficultyColor(scenario.difficulty_level || 1)}>
                               {getDifficultyLabel(scenario.difficulty_level || 1)}
@@ -167,21 +171,21 @@ const EnhancedScenarioSelector = ({ onSelectScenario }: EnhancedScenarioSelector
                       {scenario.description}
                     </p>
                     
-                    {scenario.expected_outcomes?.objectives && (
+                    {objectives.length > 0 && (
                       <div className="mb-4">
                         <h4 className="font-medium text-xs mb-2 text-gray-500 uppercase tracking-wide">
                           Objetivos:
                         </h4>
                         <ul className="space-y-1">
-                          {scenario.expected_outcomes.objectives.slice(0, 3).map((objective: string, index: number) => (
+                          {objectives.slice(0, 3).map((objective: string, index: number) => (
                             <li key={index} className="text-xs text-gray-600 dark:text-gray-300 flex items-center">
                               <div className="w-1 h-1 bg-purple-600 rounded-full mr-2 flex-shrink-0" />
                               <span className="truncate">{objective}</span>
                             </li>
                           ))}
-                          {scenario.expected_outcomes.objectives.length > 3 && (
+                          {objectives.length > 3 && (
                             <li className="text-xs text-gray-500">
-                              +{scenario.expected_outcomes.objectives.length - 3} más...
+                              +{objectives.length - 3} más...
                             </li>
                           )}
                         </ul>

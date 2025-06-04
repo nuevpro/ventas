@@ -55,13 +55,17 @@ const ScenarioDialog = ({ scenario, trigger, onSuccess }: ScenarioDialogProps) =
 
   useEffect(() => {
     if (scenario) {
+      // Type guard para expected_outcomes
+      const expectedOutcomes = scenario.expected_outcomes as { objectives?: string[] } | null;
+      const objectives = expectedOutcomes?.objectives || [''];
+      
       setFormData({
         title: scenario.title,
         description: scenario.description || '',
         scenario_type: scenario.scenario_type || 'sales',
         difficulty_level: scenario.difficulty_level || 1,
         prompt_instructions: scenario.prompt_instructions || '',
-        objectives: scenario.expected_outcomes?.objectives || ['']
+        objectives: objectives.length > 0 ? objectives : ['']
       });
     }
   }, [scenario]);
