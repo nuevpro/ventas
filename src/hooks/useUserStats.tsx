@@ -7,19 +7,22 @@ import type { Database } from '@/integrations/supabase/types';
 type UserStats = Database['public']['Tables']['user_stats']['Row'];
 
 export const useUserStats = () => {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [stats, setStats] = useState<UserStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (authLoading) return;
+    
     if (!user?.id) {
       setLoading(false);
+      setStats(null);
       return;
     }
 
     loadUserStats();
-  }, [user?.id]);
+  }, [user?.id, authLoading]);
 
   const loadUserStats = async () => {
     if (!user?.id) {
@@ -39,9 +42,11 @@ export const useUserStats = () => {
         .eq('user_id', user.id)
         .maybeSingle();
 
-      if (error) throw error;
+      if (error) {
+        console.error('useUserStats: Error loading stats:', error);
+        throw error;
+      }
 
-      // Si no existen estadísticas, crear nuevas
       if (!data) {
         console.log('useUserStats: Creating new stats for user:', user.id);
         const { data: newStats, error: insertError } = await supabase
@@ -59,13 +64,16 @@ export const useUserStats = () => {
           .select()
           .single();
 
-        if (insertError) throw insertError;
+        if (insertError) {
+          console.error('useUserStats: Error creating stats:', insertError);
+          throw insertError;
+        }
         setStats(newStats);
       } else {
         setStats(data);
       }
     } catch (err) {
-      console.error('useUserStats: Error loading stats:', err);
+      console.error('useUserStats: Error:', err);
       setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
       setLoading(false);
@@ -73,14 +81,14 @@ export const useUserStats = () => {
   };
 
   const refreshStats = () => {
-    if (user?.id) {
+    if (user?.id && !authLoading) {
       loadUserStats();
     }
   };
 
   return {
     stats,
-    loading,
+    loading: loading || authLoading,
     error,
     refreshStats
   };

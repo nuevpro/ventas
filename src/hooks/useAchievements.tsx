@@ -10,20 +10,24 @@ type UserAchievement = Database['public']['Tables']['user_achievements']['Row'] 
 };
 
 export const useAchievements = () => {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [achievements, setAchievements] = useState<UserAchievement[]>([]);
   const [availableAchievements, setAvailableAchievements] = useState<Achievement[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (authLoading) return;
+    
     if (!user?.id) {
       setLoading(false);
+      setAchievements([]);
+      setAvailableAchievements([]);
       return;
     }
 
     loadAchievements();
-  }, [user?.id]);
+  }, [user?.id, authLoading]);
 
   const loadAchievements = async () => {
     if (!user?.id) {
@@ -37,6 +41,19 @@ export const useAchievements = () => {
 
       console.log('useAchievements: Loading achievements for user:', user.id);
 
+      // Cargar todos los logros disponibles primero
+      const { data: allAchievements, error: allError } = await supabase
+        .from('achievements')
+        .select('*')
+        .eq('is_active', true);
+
+      if (allError) {
+        console.error('useAchievements: Error loading all achievements:', allError);
+        throw allError;
+      }
+
+      setAvailableAchievements(allAchievements || []);
+
       // Cargar logros del usuario
       const { data: userAchievements, error: userError } = await supabase
         .from('user_achievements')
@@ -46,21 +63,17 @@ export const useAchievements = () => {
         `)
         .eq('user_id', user.id);
 
-      if (userError) throw userError;
+      if (userError) {
+        console.error('useAchievements: Error loading user achievements:', userError);
+        throw userError;
+      }
 
-      // Cargar todos los logros disponibles
-      const { data: allAchievements, error: allError } = await supabase
-        .from('achievements')
-        .select('*')
-        .eq('is_active', true);
+      setAchievements(userAchievements as UserAchievement[] || []);
 
-      if (allError) throw allError;
-
-      setAchievements(userAchievements as UserAchievement[]);
-      setAvailableAchievements(allAchievements);
-
-      // Verificar logros automáticamente
-      await checkAchievements();
+      // Verificar logros automáticamente solo si hay datos
+      if (allAchievements && allAchievements.length > 0) {
+        await checkAchievements();
+      }
     } catch (err) {
       console.error('useAchievements: Error loading achievements:', err);
       setError(err instanceof Error ? err.message : 'Error desconocido');
@@ -77,14 +90,16 @@ export const useAchievements = () => {
         p_user_id: user.id
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('useAchievements: Error checking achievements:', error);
+      }
     } catch (err) {
-      console.error('useAchievements: Error checking achievements:', err);
+      console.error('useAchievements: Error in checkAchievements:', err);
     }
   };
 
   const refreshAchievements = () => {
-    if (user?.id) {
+    if (user?.id && !authLoading) {
       loadAchievements();
     }
   };
@@ -92,7 +107,7 @@ export const useAchievements = () => {
   return {
     achievements,
     availableAchievements,
-    loading,
+    loading: loading || authLoading,
     error,
     refreshAchievements,
     checkAchievements

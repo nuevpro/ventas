@@ -100,7 +100,7 @@ export class SessionManager {
         console.error('SessionManager: Error creating session:', error);
         this.toast?.({
           title: "Error",
-          description: `No se pudo crear la sesión: ${error.message}`,
+          description: `Error al crear la sesión: ${error.message || 'Error desconocido'}`,
           variant: "destructive",
         });
         return null;
@@ -130,6 +130,11 @@ export class SessionManager {
   }
 
   async saveMessage(sessionId: string, content: string, sender: 'user' | 'ai', timestampInSession: number): Promise<void> {
+    if (!sessionId || !content || !sender) {
+      console.error('SessionManager: Invalid parameters for saveMessage');
+      return;
+    }
+
     try {
       const { error } = await supabase
         .from('conversation_messages')
@@ -150,6 +155,11 @@ export class SessionManager {
   }
 
   async saveRealTimeMetric(sessionId: string, metricName: string, metricValue: number): Promise<void> {
+    if (!sessionId || !metricName || typeof metricValue !== 'number') {
+      console.error('SessionManager: Invalid parameters for saveRealTimeMetric');
+      return;
+    }
+
     try {
       const { error } = await supabase
         .from('real_time_metrics')
@@ -169,6 +179,11 @@ export class SessionManager {
   }
 
   async endSession(sessionId: string, finalScore: number): Promise<void> {
+    if (!sessionId || typeof finalScore !== 'number') {
+      console.error('SessionManager: Invalid parameters for endSession');
+      return;
+    }
+
     try {
       const endTime = new Date().toISOString();
       const currentSession = this.currentSession;
