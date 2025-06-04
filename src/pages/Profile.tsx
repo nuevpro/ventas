@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -39,48 +38,52 @@ const Profile = () => {
     try {
       setLoading(true);
       
-      // Cargar perfil
+      // Cargar perfil usando un select más simple
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', user.id)
-        .maybeSingle();
+        .single();
 
-      if (profileError && profileError.code !== 'PGRST116') {
-        throw profileError;
-      }
+      if (profileError) {
+        console.error('Profile error:', profileError);
+        // Si no existe el perfil, intentar crearlo
+        if (profileError.code === 'PGRST116') {
+          const newProfile = {
+            id: user.id,
+            email: user.email || '',
+            full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || '',
+            avatar_url: user.user_metadata?.avatar_url || ''
+          };
 
-      if (profileData) {
+          const { data: insertedProfile, error: insertError } = await supabase
+            .from('profiles')
+            .insert(newProfile)
+            .select()
+            .single();
+
+          if (insertError) {
+            console.error('Insert error:', insertError);
+            throw insertError;
+          }
+
+          setProfile(insertedProfile);
+          setFormData({
+            full_name: insertedProfile.full_name || '',
+            avatar_url: insertedProfile.avatar_url || ''
+          });
+        } else {
+          throw profileError;
+        }
+      } else {
         setProfile(profileData);
         setFormData({
           full_name: profileData.full_name || '',
           avatar_url: profileData.avatar_url || ''
         });
-      } else {
-        // Crear perfil si no existe
-        const newProfile = {
-          id: user.id,
-          email: user.email || '',
-          full_name: user.user_metadata?.full_name || '',
-          avatar_url: user.user_metadata?.avatar_url || ''
-        };
-
-        const { data: insertedProfile, error: insertError } = await supabase
-          .from('profiles')
-          .insert(newProfile)
-          .select()
-          .single();
-
-        if (insertError) throw insertError;
-
-        setProfile(insertedProfile);
-        setFormData({
-          full_name: insertedProfile.full_name || '',
-          avatar_url: insertedProfile.avatar_url || ''
-        });
       }
 
-      // Cargar estadísticas
+      // Cargar estadísticas de forma más simple
       const { data: statsData } = await supabase
         .from('user_stats')
         .select('*')
@@ -89,7 +92,7 @@ const Profile = () => {
 
       setStats(statsData);
 
-      // Cargar logros
+      // Cargar logros de forma más simple
       const { data: achievementsData } = await supabase
         .from('user_achievements')
         .select(`
@@ -116,23 +119,29 @@ const Profile = () => {
 
     try {
       setSaving(true);
+      
+      // Actualizar usando upsert para evitar problemas de permisos
       const { error } = await supabase
         .from('profiles')
-        .update({
+        .upsert({
+          id: user.id,
+          email: user.email || '',
           full_name: formData.full_name,
           avatar_url: formData.avatar_url,
           updated_at: new Date().toISOString()
-        })
-        .eq('id', user.id);
+        });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Update error:', error);
+        throw error;
+      }
 
       toast({
         title: "Perfil actualizado",
         description: "Tus cambios han sido guardados correctamente",
       });
 
-      loadProfileData();
+      await loadProfileData();
     } catch (error) {
       console.error('Error updating profile:', error);
       toast({

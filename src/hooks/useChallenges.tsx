@@ -189,6 +189,46 @@ export const useChallenges = () => {
     }
   };
 
+  const updateChallenge = async (challengeId: string, challengeData: any) => {
+    if (!user?.id) return;
+
+    try {
+      const { error } = await supabase
+        .from('challenges')
+        .update({
+          title: challengeData.title,
+          description: challengeData.description,
+          challenge_type: challengeData.challengeType,
+          difficulty_level: challengeData.difficultyLevel,
+          target_score: challengeData.targetScore,
+          objective_type: challengeData.objectiveType,
+          objective_value: challengeData.objectiveValue,
+          end_date: challengeData.endDate ? new Date(challengeData.endDate).toISOString() : null,
+          team_id: challengeData.teamId,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', challengeId)
+        .eq('created_by', user.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "¡Éxito!",
+        description: "Desafío actualizado correctamente.",
+      });
+
+      loadChallenges();
+    } catch (err) {
+      console.error('Error updating challenge:', err);
+      toast({
+        title: "Error",
+        description: "No se pudo actualizar el desafío.",
+        variant: "destructive",
+      });
+      throw err;
+    }
+  };
+
   const joinChallenge = async (challengeId: string) => {
     if (!user?.id) return;
 
@@ -282,6 +322,7 @@ export const useChallenges = () => {
     loading,
     error,
     createCustomChallenge,
+    updateChallenge,
     joinChallenge,
     leaveChallenge,
     deleteChallenge,
