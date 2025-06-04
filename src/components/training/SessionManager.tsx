@@ -74,6 +74,59 @@ export const useSessionManager = () => {
     }
   }, [user?.id, toast]);
 
+  const saveMessage = useCallback(async (content: string, sender: 'user' | 'ai', timestamp: number, audioUrl?: string): Promise<void> => {
+    if (!currentSessionId) return;
+
+    try {
+      // Obtener la sesión actual
+      const { data: session, error: fetchError } = await supabase
+        .from('training_sessions')
+        .select('conversation_log')
+        .eq('id', currentSessionId)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      // Agregar el nuevo mensaje
+      const updatedMessages = [
+        ...(session.conversation_log?.messages || []),
+        {
+          id: Date.now().toString(),
+          content,
+          sender,
+          timestamp,
+          audioUrl
+        }
+      ];
+
+      // Actualizar la sesión
+      const { error: updateError } = await supabase
+        .from('training_sessions')
+        .update({
+          conversation_log: {
+            ...session.conversation_log,
+            messages: updatedMessages
+          }
+        })
+        .eq('id', currentSessionId);
+
+      if (updateError) throw updateError;
+    } catch (error) {
+      console.error('Error saving message:', error);
+    }
+  }, [currentSessionId]);
+
+  const saveRealTimeMetric = useCallback(async (metricType: string, value: number): Promise<void> => {
+    if (!currentSessionId) return;
+
+    try {
+      // Guardar métrica en tiempo real (esto podría expandirse para una tabla específica)
+      console.log(`Saving metric ${metricType}: ${value} for session ${currentSessionId}`);
+    } catch (error) {
+      console.error('Error saving metric:', error);
+    }
+  }, [currentSessionId]);
+
   const endSession = useCallback(async (sessionEndData: SessionEndData): Promise<void> => {
     if (!currentSessionId || !user?.id) {
       return;
@@ -115,7 +168,7 @@ export const useSessionManager = () => {
     }
   }, [currentSessionId, user?.id, toast]);
 
-  const getUserSessions = useCallback(async () => {
+  const getUserSessions = useCallback(async (): Promise<any[]> => {
     if (!user?.id) return [];
 
     try {
@@ -140,10 +193,56 @@ export const useSessionManager = () => {
     }
   }, [user?.id]);
 
+  const getSessionMessages = useCallback(async (sessionId: string): Promise<any[]> => {
+    try {
+      const { data: session, error } = await supabase
+        .from('training_sessions')
+        .select('conversation_log')
+        .eq('id', sessionId)
+        .single();
+
+      if (error) throw error;
+
+      return session.conversation_log?.messages || [];
+    } catch (error) {
+      console.error('Error fetching session messages:', error);
+      return [];
+    }
+  }, []);
+
+  const getSessionEvaluation = useCallback(async (sessionId: string): Promise<any | null> => {
+    try {
+      const { data: session, error } = await supabase
+        .from('training_sessions')
+        .select('score, conversation_log')
+        .eq('id', sessionId)
+        .single();
+
+      if (error) throw error;
+
+      // Simular evaluación detallada
+      return {
+        overall_score: session.score || 0,
+        rapport_score: Math.floor(Math.random() * 20) + 70,
+        clarity_score: Math.floor(Math.random() * 20) + 75,
+        empathy_score: Math.floor(Math.random() * 20) + 65,
+        accuracy_score: Math.floor(Math.random() * 20) + 80,
+        specific_feedback: "Buena comunicación general. Considera mejorar la empatía en situaciones difíciles."
+      };
+    } catch (error) {
+      console.error('Error fetching session evaluation:', error);
+      return null;
+    }
+  }, []);
+
   return {
     startSession,
     endSession,
+    saveMessage,
+    saveRealTimeMetric,
     getUserSessions,
+    getSessionMessages,
+    getSessionEvaluation,
     currentSessionId,
     isSessionActive
   };

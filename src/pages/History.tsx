@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -28,7 +27,7 @@ const History = () => {
   const loadSessions = async () => {
     try {
       setLoading(true);
-      const sessionsData = await sessionManager.getUserSessions(50);
+      const sessionsData = await sessionManager.getUserSessions();
       setSessions(sessionsData);
     } catch (error) {
       console.error('Error loading sessions:', error);
@@ -338,16 +337,16 @@ const History = () => {
                               <span>{formatDuration(session.duration_minutes || 0)}</span>
                             </div>
                             <div>
-                              <span>Emoción: {session.client_emotion || 'N/A'}</span>
+                              <span>Emoción: {session.conversation_log?.client_emotion || 'N/A'}</span>
                             </div>
                             <div>
-                              <span>Modo: {session.interaction_mode || 'N/A'}</span>
+                              <span>Modo: {session.conversation_log?.interaction_mode || 'N/A'}</span>
                             </div>
                           </div>
                           
-                          {(session.total_messages || 0) > 0 && (
+                          {(session.conversation_log?.messages?.length || 0) > 0 && (
                             <div className="mt-2 text-sm text-gray-500">
-                              {session.total_messages} mensajes • {session.user_words_count || 0} palabras del usuario
+                              {session.conversation_log.messages.length} mensajes
                             </div>
                           )}
                         </div>
