@@ -26,8 +26,16 @@ export const useAchievements = () => {
   }, [user?.id]);
 
   const loadAchievements = async () => {
+    if (!user?.id) {
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
+      setError(null);
+
+      console.log('useAchievements: Loading achievements for user:', user.id);
 
       // Cargar logros del usuario
       const { data: userAchievements, error: userError } = await supabase
@@ -36,7 +44,7 @@ export const useAchievements = () => {
           *,
           achievement:achievements(*)
         `)
-        .eq('user_id', user!.id);
+        .eq('user_id', user.id);
 
       if (userError) throw userError;
 
@@ -54,7 +62,7 @@ export const useAchievements = () => {
       // Verificar logros automáticamente
       await checkAchievements();
     } catch (err) {
-      console.error('Error loading achievements:', err);
+      console.error('useAchievements: Error loading achievements:', err);
       setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
       setLoading(false);
@@ -62,14 +70,16 @@ export const useAchievements = () => {
   };
 
   const checkAchievements = async () => {
+    if (!user?.id) return;
+
     try {
       const { error } = await supabase.rpc('check_and_grant_achievements', {
-        p_user_id: user!.id
+        p_user_id: user.id
       });
 
       if (error) throw error;
     } catch (err) {
-      console.error('Error checking achievements:', err);
+      console.error('useAchievements: Error checking achievements:', err);
     }
   };
 

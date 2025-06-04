@@ -22,12 +22,21 @@ export const useActivityLog = () => {
   }, [user?.id]);
 
   const loadActivityLog = async () => {
+    if (!user?.id) {
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
+      setError(null);
+      
+      console.log('useActivityLog: Loading activities for user:', user.id);
+      
       const { data, error } = await supabase
         .from('user_activity_log')
         .select('*')
-        .eq('user_id', user!.id)
+        .eq('user_id', user.id)
         .order('created_at', { ascending: false })
         .limit(50);
 
@@ -35,7 +44,7 @@ export const useActivityLog = () => {
 
       setActivities(data || []);
     } catch (err) {
-      console.error('Error loading activity log:', err);
+      console.error('useActivityLog: Error loading activities:', err);
       setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
       setLoading(false);
@@ -43,11 +52,16 @@ export const useActivityLog = () => {
   };
 
   const logActivity = async (activityType: string, activityData?: any, pointsEarned: number = 0) => {
+    if (!user?.id) {
+      console.log('useActivityLog: No user ID for logActivity');
+      return;
+    }
+
     try {
       const { error } = await supabase
         .from('user_activity_log')
         .insert({
-          user_id: user!.id,
+          user_id: user.id,
           activity_type: activityType,
           activity_data: activityData,
           points_earned: pointsEarned
@@ -57,7 +71,7 @@ export const useActivityLog = () => {
 
       loadActivityLog(); // Recargar para mostrar nueva actividad
     } catch (err) {
-      console.error('Error logging activity:', err);
+      console.error('useActivityLog: Error logging activity:', err);
     }
   };
 

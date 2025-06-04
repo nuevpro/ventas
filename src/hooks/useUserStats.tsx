@@ -22,22 +22,32 @@ export const useUserStats = () => {
   }, [user?.id]);
 
   const loadUserStats = async () => {
+    if (!user?.id) {
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
+      setError(null);
+      
+      console.log('useUserStats: Loading stats for user:', user.id);
+      
       const { data, error } = await supabase
         .from('user_stats')
         .select('*')
-        .eq('user_id', user!.id)
+        .eq('user_id', user.id)
         .maybeSingle();
 
       if (error) throw error;
 
       // Si no existen estadísticas, crear nuevas
       if (!data) {
+        console.log('useUserStats: Creating new stats for user:', user.id);
         const { data: newStats, error: insertError } = await supabase
           .from('user_stats')
           .insert({
-            user_id: user!.id,
+            user_id: user.id,
             total_sessions: 0,
             total_time_minutes: 0,
             best_score: 0,
@@ -55,7 +65,7 @@ export const useUserStats = () => {
         setStats(data);
       }
     } catch (err) {
-      console.error('Error loading user stats:', err);
+      console.error('useUserStats: Error loading stats:', err);
       setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
       setLoading(false);

@@ -6,7 +6,6 @@ import { useToast } from '@/hooks/use-toast';
 import type { Database } from '@/integrations/supabase/types';
 
 type Team = Database['public']['Tables']['teams']['Row'];
-type TeamMember = Database['public']['Tables']['team_members']['Row'];
 
 export const useTeams = () => {
   const { user } = useAuth();
@@ -26,8 +25,16 @@ export const useTeams = () => {
   }, [user?.id]);
 
   const loadTeams = async () => {
+    if (!user?.id) {
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
+      setError(null);
+
+      console.log('useTeams: Loading teams for user:', user.id);
 
       // Cargar todos los equipos públicos
       const { data: allTeams, error: teamsError } = await supabase
@@ -44,14 +51,14 @@ export const useTeams = () => {
         .select(`
           team:teams(*)
         `)
-        .eq('user_id', user!.id);
+        .eq('user_id', user.id);
 
       if (memberError) throw memberError;
 
       setTeams(allTeams || []);
       setUserTeams(memberTeams?.map(mt => mt.team).filter(Boolean) as Team[] || []);
     } catch (err) {
-      console.error('Error loading teams:', err);
+      console.error('useTeams: Error loading teams:', err);
       setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
       setLoading(false);
@@ -59,6 +66,15 @@ export const useTeams = () => {
   };
 
   const createTeam = async (teamData: { name: string; description?: string; isPublic: boolean; maxMembers?: number }) => {
+    if (!user?.id) {
+      toast({
+        title: "Error",
+        description: "Usuario no autenticado",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       const { data: newTeam, error } = await supabase
         .from('teams')
@@ -67,7 +83,7 @@ export const useTeams = () => {
           description: teamData.description,
           is_public: teamData.isPublic,
           max_members: teamData.maxMembers || 10,
-          captain_id: user!.id
+          captain_id: user.id
         })
         .select()
         .single();
@@ -79,7 +95,7 @@ export const useTeams = () => {
         .from('team_members')
         .insert({
           team_id: newTeam.id,
-          user_id: user!.id,
+          user_id: user.id,
           role: 'captain'
         });
 
@@ -91,7 +107,7 @@ export const useTeams = () => {
       loadTeams();
       return newTeam;
     } catch (err) {
-      console.error('Error creating team:', err);
+      console.error('useTeams: Error creating team:', err);
       toast({
         title: "Error",
         description: "No se pudo crear el equipo.",
@@ -102,12 +118,21 @@ export const useTeams = () => {
   };
 
   const joinTeam = async (teamId: string) => {
+    if (!user?.id) {
+      toast({
+        title: "Error",
+        description: "Usuario no autenticado",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       const { error } = await supabase
         .from('team_members')
         .insert({
           team_id: teamId,
-          user_id: user!.id,
+          user_id: user.id,
           role: 'member'
         });
 
@@ -120,7 +145,7 @@ export const useTeams = () => {
 
       loadTeams();
     } catch (err) {
-      console.error('Error joining team:', err);
+      console.error('useTeams: Error joining team:', err);
       toast({
         title: "Error",
         description: "No se pudo unir al equipo.",

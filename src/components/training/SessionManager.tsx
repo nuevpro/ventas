@@ -51,12 +51,12 @@ export class SessionManager {
 
   setUserId(userId: string) {
     this.userId = userId;
-    console.log('Setting user ID in SessionManager:', userId);
+    console.log('SessionManager: Setting user ID:', userId);
   }
 
   async startSession(config: any): Promise<string | null> {
     if (!this.userId) {
-      console.error('No user ID available');
+      console.error('SessionManager: No user ID available');
       this.toast?.({
         title: "Error",
         description: "Usuario no autenticado",
@@ -66,13 +66,13 @@ export class SessionManager {
     }
 
     try {
-      console.log('Creating session with user ID:', this.userId);
+      console.log('SessionManager: Creating session for user:', this.userId);
       
       const conversationLog = {
         scenario_title: config.scenarioTitle || 'Entrenamiento General',
         client_emotion: config.clientEmotion || 'neutral',
         interaction_mode: config.interactionMode || 'chat',
-        voice_used: config.selectedVoice || null,
+        voice_used: config.selectedVoiceName || null,
         session_status: 'in_progress',
         started_at: new Date().toISOString(),
         total_messages: 0,
@@ -88,7 +88,7 @@ export class SessionManager {
         conversation_log: conversationLog as any
       };
 
-      console.log('Inserting session data:', sessionData);
+      console.log('SessionManager: Inserting session data:', sessionData);
 
       const { data, error } = await supabase
         .from('training_sessions')
@@ -97,10 +97,10 @@ export class SessionManager {
         .single();
 
       if (error) {
-        console.error('Error creating session:', error);
+        console.error('SessionManager: Error creating session:', error);
         this.toast?.({
           title: "Error",
-          description: `No se pudo crear la sesión de entrenamiento: ${error.message}`,
+          description: `No se pudo crear la sesión: ${error.message}`,
           variant: "destructive",
         });
         return null;
@@ -108,29 +108,21 @@ export class SessionManager {
 
       this.currentSession = {
         ...data,
-        scenario_title: conversationLog.scenario_title,
-        client_emotion: conversationLog.client_emotion,
-        interaction_mode: conversationLog.interaction_mode,
-        voice_used: conversationLog.voice_used,
-        session_status: conversationLog.session_status,
-        started_at: conversationLog.started_at,
-        total_messages: conversationLog.total_messages,
-        user_words_count: conversationLog.user_words_count,
-        ai_words_count: conversationLog.ai_words_count
+        ...conversationLog
       };
 
-      console.log('Session started successfully:', data.id);
+      console.log('SessionManager: Session created successfully:', data.id);
       this.toast?.({
         title: "¡Éxito!",
-        description: "Sesión de entrenamiento iniciada correctamente",
+        description: "Sesión iniciada correctamente",
       });
       
       return data.id;
     } catch (error) {
-      console.error('Error starting session:', error);
+      console.error('SessionManager: Error starting session:', error);
       this.toast?.({
         title: "Error",
-        description: "Error al iniciar la sesión de entrenamiento",
+        description: "Error al iniciar la sesión",
         variant: "destructive",
       });
       return null;
@@ -149,11 +141,11 @@ export class SessionManager {
         });
 
       if (error) {
-        console.error('Error saving message:', error);
+        console.error('SessionManager: Error saving message:', error);
         throw error;
       }
     } catch (error) {
-      console.error('Error saving message:', error);
+      console.error('SessionManager: Error in saveMessage:', error);
     }
   }
 
@@ -168,11 +160,11 @@ export class SessionManager {
         });
 
       if (error) {
-        console.error('Error saving real-time metric:', error);
+        console.error('SessionManager: Error saving metric:', error);
         throw error;
       }
     } catch (error) {
-      console.error('Error saving real-time metric:', error);
+      console.error('SessionManager: Error in saveRealTimeMetric:', error);
     }
   }
 
@@ -181,7 +173,7 @@ export class SessionManager {
       const endTime = new Date().toISOString();
       const currentSession = this.currentSession;
       
-      if (currentSession && currentSession.conversation_log) {
+      if (currentSession?.conversation_log) {
         const updatedConversationLog = {
           ...currentSession.conversation_log as any,
           session_status: 'completed',
@@ -198,14 +190,15 @@ export class SessionManager {
           .eq('id', sessionId);
 
         if (error) {
-          console.error('Error ending session:', error);
+          console.error('SessionManager: Error ending session:', error);
           throw error;
         }
 
         this.currentSession = null;
+        console.log('SessionManager: Session ended successfully');
       }
     } catch (error) {
-      console.error('Error ending session:', error);
+      console.error('SessionManager: Error in endSession:', error);
     }
   }
 
@@ -219,22 +212,22 @@ export class SessionManager {
         });
 
       if (error) {
-        console.error('Error saving evaluation:', error);
+        console.error('SessionManager: Error saving evaluation:', error);
         throw error;
       }
     } catch (error) {
-      console.error('Error saving evaluation:', error);
+      console.error('SessionManager: Error in saveEvaluation:', error);
     }
   }
 
   async getUserSessions(limit: number = 10): Promise<SessionData[]> {
     if (!this.userId) {
-      console.log('No user ID available for getUserSessions');
+      console.log('SessionManager: No user ID for getUserSessions');
       return [];
     }
 
     try {
-      console.log('Fetching sessions for user:', this.userId);
+      console.log('SessionManager: Fetching sessions for user:', this.userId);
       
       const { data, error } = await supabase
         .from('training_sessions')
@@ -244,11 +237,11 @@ export class SessionManager {
         .limit(limit);
 
       if (error) {
-        console.error('Error fetching sessions:', error);
+        console.error('SessionManager: Error fetching sessions:', error);
         return [];
       }
 
-      console.log('Sessions fetched successfully:', data?.length || 0);
+      console.log('SessionManager: Sessions fetched:', data?.length || 0);
 
       return (data || []).map(session => ({
         ...session,
@@ -265,7 +258,7 @@ export class SessionManager {
         ai_words_count: (session.conversation_log as any)?.ai_words_count || 0
       })) as SessionData[];
     } catch (error) {
-      console.error('Error fetching sessions:', error);
+      console.error('SessionManager: Error in getUserSessions:', error);
       return [];
     }
   }
@@ -279,7 +272,7 @@ export class SessionManager {
         .order('timestamp_in_session', { ascending: true });
 
       if (error) {
-        console.error('Error fetching session messages:', error);
+        console.error('SessionManager: Error fetching messages:', error);
         return [];
       }
 
@@ -288,7 +281,7 @@ export class SessionManager {
         sender: msg.sender as 'user' | 'ai'
       }));
     } catch (error) {
-      console.error('Error fetching session messages:', error);
+      console.error('SessionManager: Error in getSessionMessages:', error);
       return [];
     }
   }
@@ -302,13 +295,13 @@ export class SessionManager {
         .maybeSingle();
 
       if (error) {
-        console.error('Error fetching session evaluation:', error);
+        console.error('SessionManager: Error fetching evaluation:', error);
         return null;
       }
 
       return data;
     } catch (error) {
-      console.error('Error fetching session evaluation:', error);
+      console.error('SessionManager: Error in getSessionEvaluation:', error);
       return null;
     }
   }
@@ -326,7 +319,7 @@ export const useSessionManager = () => {
   useEffect(() => {
     sessionManager.setToast(toast);
     if (user?.id) {
-      console.log('Setting user ID in SessionManager:', user.id);
+      console.log('useSessionManager: Setting user ID:', user.id);
       sessionManager.setUserId(user.id);
     }
   }, [user, toast]);
