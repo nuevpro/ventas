@@ -58,7 +58,7 @@ export const useSessionManager = () => {
         .from('training_sessions')
         .insert({
           user_id: user.id,
-          conversation_log: conversationLogData
+          conversation_log: conversationLogData as any
         })
         .select()
         .single();
@@ -120,7 +120,7 @@ export const useSessionManager = () => {
       const { error: updateError } = await supabase
         .from('training_sessions')
         .update({
-          conversation_log: updatedLog
+          conversation_log: updatedLog as any
         })
         .eq('id', currentSessionId);
 
@@ -160,7 +160,7 @@ export const useSessionManager = () => {
         .update({
           completed_at: new Date().toISOString(),
           duration_minutes: sessionEndData.duration,
-          conversation_log: conversationLogData,
+          conversation_log: conversationLogData as any,
           score: Math.floor(Math.random() * 41) + 60
         })
         .eq('id', currentSessionId);
