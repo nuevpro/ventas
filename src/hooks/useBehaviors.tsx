@@ -174,7 +174,7 @@ export const useBehaviors = () => {
       toast({
         title: "Error",
         description: "No se pudo eliminar el comportamiento",
-        variant: "destructiva",
+        variant: "destructive",
       });
       throw err;
     }
