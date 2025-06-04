@@ -1,253 +1,440 @@
 
-import React, { useState } from 'react';
-import { Edit, User, Mail, Calendar, Star, BookOpen, Trophy, Target } from 'lucide-react';
-import StatCard from '@/components/StatCard';
+import React, { useState, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { User, Mail, Calendar, Trophy, Target, Star, Settings, Camera } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
+import { useUserStats } from '@/hooks/useUserStats';
+import { useAchievements } from '@/hooks/useAchievements';
+import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 
 const Profile = () => {
-  const [activeTab, setActiveTab] = useState('Actividad reciente');
+  const { user } = useAuth();
+  const { stats, refreshStats } = useUserStats();
+  const { achievements } = useAchievements();
+  const { toast } = useToast();
+  
+  const [profile, setProfile] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [formData, setFormData] = useState({
+    full_name: '',
+    avatar_url: ''
+  });
 
-  const tabs = ['Actividad reciente', 'Estadísticas', 'Insignias'];
+  useEffect(() => {
+    loadProfile();
+  }, [user]);
 
-  const recentSessions = [
-    {
-      title: 'Bienvenida al Cliente - Escenario 1',
-      level: 'Nivel 1: Bienvenida al Cliente',
-      date: '6/3/2025',
-      duration: '7 min',
-      score: 63
-    },
-    {
-      title: 'Bienvenida al Cliente - Escenario 1',
-      level: 'Nivel 1: Bienvenida al Cliente',
-      date: '5/30/2025',
-      duration: '0 min',
-      score: 0
-    },
-    {
-      title: 'Bienvenida al Cliente - Escenario 1',
-      level: 'Nivel 1: Bienvenida al Cliente',
-      date: '5/23/2025',
-      duration: '4 min',
-      score: 55
-    },
-    {
-      title: 'Bienvenida al Cliente - Escenario 1',
-      level: 'Nivel 1: Bienvenida al Cliente',
-      date: '5/21/2025',
-      duration: '4 min',
-      score: 58
-    },
-    {
-      title: 'Bienvenida al Cliente - Escenario 1',
-      level: 'Nivel 1: Bienvenida al Cliente',
-      date: '5/21/2025',
-      duration: '4 min',
-      score: 49
+  const loadProfile = async () => {
+    if (!user?.id) return;
+
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (error && error.code !== 'PGRST116') {
+        throw error;
+      }
+
+      if (data) {
+        setProfile(data);
+        setFormData({
+          full_name: data.full_name || '',
+          avatar_url: data.avatar_url || ''
+        });
+      } else {
+        // Crear perfil si no existe
+        const newProfile = {
+          id: user.id,
+          email: user.email || '',
+          full_name: user.user_metadata?.full_name || '',
+          avatar_url: user.user_metadata?.avatar_url || ''
+        };
+
+        const { data: insertedProfile, error: insertError } = await supabase
+          .from('profiles')
+          .insert(newProfile)
+          .select()
+          .single();
+
+        if (insertError) throw insertError;
+
+        setProfile(insertedProfile);
+        setFormData({
+          full_name: insertedProfile.full_name || '',
+          avatar_url: insertedProfile.avatar_url || ''
+        });
+      }
+    } catch (error) {
+      console.error('Error loading profile:', error);
+      toast({
+        title: "Error",
+        description: "No se pudo cargar el perfil",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
+
+  const updateProfile = async () => {
+    if (!user?.id) return;
+
+    try {
+      setSaving(true);
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          full_name: formData.full_name,
+          avatar_url: formData.avatar_url,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', user.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Perfil actualizado",
+        description: "Tus cambios han sido guardados correctamente",
+      });
+
+      loadProfile(); // Recargar para mostrar cambios
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      toast({
+        title: "Error",
+        description: "No se pudo actualizar el perfil",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const earnedAchievements = achievements.filter(ua => ua.earned_at);
+  const levelProgress = stats ? ((stats.total_xp % 1000) / 1000) * 100 : 0;
+  const nextLevelXP = stats ? Math.ceil(stats.total_xp / 1000) * 1000 : 1000;
+
+  const getInitials = (name: string) => {
+    return name
+      .split(' ')
+      .map(word => word.charAt(0))
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
+  };
+
+  const formatJoinDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('es-ES', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
+        <div className="max-w-4xl mx-auto">
+          <div className="animate-pulse space-y-6">
+            <Card>
+              <CardContent className="p-6">
+                <div className="h-32 bg-gray-200 dark:bg-gray-700 rounded"></div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Mi Perfil</h1>
-            <p className="text-gray-600 mt-2">Gestiona tu información personal y revisa tu progreso</p>
-          </div>
-          <button className="bg-gray-900 text-white px-4 py-2 rounded-lg font-medium hover:bg-gray-800 transition-colors flex items-center">
-            <Edit className="h-4 w-4 mr-2" />
-            Editar perfil
-          </button>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Profile Info */}
-          <div className="lg:col-span-1">
-            <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
-              {/* Avatar and Basic Info */}
-              <div className="text-center mb-6">
-                <div className="w-24 h-24 bg-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <span className="text-2xl font-bold text-white">H</span>
-                </div>
-                <h2 className="text-xl font-bold text-gray-900">HS álvarez</h2>
-                <p className="text-gray-600">proyecto@gmail.com</p>
-                <span className="inline-block bg-gray-100 text-gray-700 px-3 py-1 rounded-full text-sm font-medium mt-2">
-                  Usuario
-                </span>
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
+      <div className="max-w-4xl mx-auto space-y-6">
+        {/* Header del perfil */}
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-start space-x-6">
+              {/* Avatar */}
+              <div className="relative">
+                <Avatar className="h-24 w-24">
+                  <AvatarImage src={profile?.avatar_url || formData.avatar_url} />
+                  <AvatarFallback className="text-lg">
+                    {getInitials(profile?.full_name || profile?.email || 'U')}
+                  </AvatarFallback>
+                </Avatar>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="absolute -bottom-2 -right-2 h-8 w-8 rounded-full p-0"
+                  disabled
+                >
+                  <Camera className="h-4 w-4" />
+                </Button>
               </div>
 
-              {/* Level Progress */}
-              <div className="mb-6">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-gray-700">Nivel 1: Novato</span>
-                  <span className="text-sm text-gray-500">0 XP</span>
+              {/* Información básica */}
+              <div className="flex-1 space-y-4">
+                <div>
+                  <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                    {profile?.full_name || 'Usuario'}
+                  </h1>
+                  <p className="text-gray-600 dark:text-gray-400">{profile?.email}</p>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div className="bg-purple-600 h-2 rounded-full" style={{ width: '0%' }} />
-                </div>
-                <p className="text-xs text-gray-500 mt-1">100 XP para siguiente nivel</p>
-              </div>
 
-              {/* Quick Stats */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <BookOpen className="h-4 w-4 text-gray-400" />
-                    <span className="text-sm text-gray-600">Sesiones</span>
+                {/* Estadísticas rápidas */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-blue-600">{stats?.level || 1}</div>
+                    <div className="text-sm text-gray-600">Nivel</div>
                   </div>
-                  <span className="text-sm font-medium text-gray-900">5</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <Trophy className="h-4 w-4 text-gray-400" />
-                    <span className="text-sm text-gray-600">Logros</span>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-green-600">{stats?.total_sessions || 0}</div>
+                    <div className="text-sm text-gray-600">Sesiones</div>
                   </div>
-                  <span className="text-sm font-medium text-gray-900">0</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <Target className="h-4 w-4 text-gray-400" />
-                    <span className="text-sm text-gray-600">Rango #</span>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-yellow-600">{earnedAchievements.length}</div>
+                    <div className="text-sm text-gray-600">Logros</div>
                   </div>
-                  <span className="text-sm font-medium text-gray-900">-</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <Star className="h-4 w-4 text-gray-400" />
-                    <span className="text-sm text-gray-600">Puntos</span>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-purple-600">{stats?.total_xp || 0}</div>
+                    <div className="text-sm text-gray-600">XP Total</div>
                   </div>
-                  <span className="text-sm font-medium text-gray-900">0</span>
                 </div>
-              </div>
 
-              {/* User Information */}
-              <div className="mt-6 pt-6 border-t border-gray-200">
-                <h3 className="font-medium text-gray-900 mb-4">Información</h3>
-                <div className="space-y-3">
+                {/* Progreso de nivel */}
+                {stats && (
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span>Progreso al Nivel {(stats.level || 1) + 1}</span>
+                      <span>{nextLevelXP - stats.total_xp} XP restantes</span>
+                    </div>
+                    <Progress value={levelProgress} className="h-2" />
+                  </div>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Tabs del perfil */}
+        <Tabs defaultValue="overview" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="overview">Resumen</TabsTrigger>
+            <TabsTrigger value="achievements">Logros</TabsTrigger>
+            <TabsTrigger value="settings">Configuración</TabsTrigger>
+          </TabsList>
+
+          {/* Tab: Resumen */}
+          <TabsContent value="overview" className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Información del usuario */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <User className="h-5 w-5 mr-2" />
+                    Información Personal
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
                   <div className="flex items-center space-x-3">
-                    <User className="h-4 w-4 text-gray-400" />
+                    <Mail className="h-4 w-4 text-gray-500" />
                     <div>
-                      <p className="text-sm text-gray-600">Nombre completo</p>
-                      <p className="text-sm font-medium text-gray-900">HS álvarez</p>
+                      <p className="text-sm text-gray-600">Email</p>
+                      <p className="font-medium">{profile?.email}</p>
                     </div>
                   </div>
                   <div className="flex items-center space-x-3">
-                    <Mail className="h-4 w-4 text-gray-400" />
-                    <div>
-                      <p className="text-sm text-gray-600">Correo electrónico</p>
-                      <p className="text-sm font-medium text-gray-900">proyecto@gmail.com</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-3">
-                    <User className="h-4 w-4 text-gray-400" />
-                    <div>
-                      <p className="text-sm text-gray-600">Rol</p>
-                      <p className="text-sm font-medium text-gray-900">Usuario</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-3">
-                    <Calendar className="h-4 w-4 text-gray-400" />
+                    <Calendar className="h-4 w-4 text-gray-500" />
                     <div>
                       <p className="text-sm text-gray-600">Miembro desde</p>
-                      <p className="text-sm font-medium text-gray-900">5/21/2025</p>
+                      <p className="font-medium">
+                        {profile?.created_at ? formatJoinDate(profile.created_at) : 'N/A'}
+                      </p>
                     </div>
                   </div>
-                </div>
-              </div>
-            </div>
-          </div>
+                  <div className="flex items-center space-x-3">
+                    <Trophy className="h-4 w-4 text-gray-500" />
+                    <div>
+                      <p className="text-sm text-gray-600">Rol</p>
+                      <Badge variant="outline">{profile?.role || 'user'}</Badge>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
 
-          {/* Content Area */}
-          <div className="lg:col-span-2">
-            {/* Tabs */}
-            <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 mb-6">
-              <div className="flex space-x-8 border-b border-gray-200">
-                {tabs.map((tab) => (
-                  <button
-                    key={tab}
-                    onClick={() => setActiveTab(tab)}
-                    className={`py-2 px-1 border-b-2 font-medium transition-colors ${
-                      activeTab === tab
-                        ? 'border-purple-600 text-purple-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700'
-                    }`}
-                  >
-                    {tab}
-                  </button>
-                ))}
-              </div>
+              {/* Estadísticas detalladas */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <Target className="h-5 w-5 mr-2" />
+                    Estadísticas de Entrenamiento
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-3">
+                    <div className="flex justify-between">
+                      <span className="text-sm text-gray-600">Tiempo total de entrenamiento</span>
+                      <span className="font-medium">
+                        {Math.floor((stats?.total_time_minutes || 0) / 60)}h {(stats?.total_time_minutes || 0) % 60}m
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-gray-600">Puntuación promedio</span>
+                      <span className="font-medium">{Number(stats?.average_score || 0).toFixed(1)}%</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-gray-600">Mejor puntuación</span>
+                      <span className="font-medium">{stats?.best_score || 0}%</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-gray-600">Racha actual</span>
+                      <span className="font-medium">{stats?.current_streak || 0} días</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-gray-600">XP por logros</span>
+                      <span className="font-medium">
+                        {earnedAchievements.reduce((sum, ua) => sum + (ua.achievement.xp_reward || 0), 0)} XP
+                      </span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
+          </TabsContent>
 
-            {/* Tab Content */}
-            {activeTab === 'Actividad reciente' && (
-              <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
-                <h3 className="text-lg font-semibold text-gray-900 mb-6">Sesiones de entrenamiento recientes</h3>
-                <div className="space-y-4">
-                  {recentSessions.map((session, index) => (
-                    <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                      <div className="flex-1">
-                        <h4 className="font-medium text-gray-900">{session.title}</h4>
-                        <p className="text-sm text-gray-600">{session.level}</p>
-                        <div className="flex items-center space-x-4 mt-1">
-                          <span className="text-xs text-gray-500">{session.date}</span>
-                          <span className="text-xs text-gray-500">{session.duration}</span>
+          {/* Tab: Logros */}
+          <TabsContent value="achievements" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">
+                  <div className="flex items-center">
+                    <Star className="h-5 w-5 mr-2" />
+                    Logros Desbloqueados
+                  </div>
+                  <Badge variant="outline">{earnedAchievements.length} de {achievements.length}</Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {earnedAchievements.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Trophy className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+                      Aún no tienes logros
+                    </h3>
+                    <p className="text-gray-600 dark:text-gray-400">
+                      Completa sesiones de entrenamiento para desbloquear logros
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {earnedAchievements.map((userAchievement) => (
+                      <div
+                        key={userAchievement.id}
+                        className="flex items-center space-x-3 p-4 border rounded-lg"
+                      >
+                        <div className="h-12 w-12 bg-yellow-500 rounded-full flex items-center justify-center">
+                          <Trophy className="h-6 w-6 text-white" />
+                        </div>
+                        <div className="flex-1">
+                          <h4 className="font-medium">{userAchievement.achievement.title}</h4>
+                          <p className="text-sm text-gray-600">
+                            {userAchievement.achievement.description}
+                          </p>
+                          <div className="flex items-center space-x-2 mt-1">
+                            <Badge variant="secondary" className="text-xs">
+                              +{userAchievement.achievement.xp_reward || 0} XP
+                            </Badge>
+                            <span className="text-xs text-gray-500">
+                              {userAchievement.earned_at ? 
+                                new Date(userAchievement.earned_at).toLocaleDateString() : 
+                                'Fecha desconocida'
+                              }
+                            </span>
+                          </div>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <span className={`text-lg font-bold ${session.score === 0 ? 'text-gray-400' : 'text-purple-600'}`}>
-                          {session.score}%
-                        </span>
-                        <button className="block mt-2 text-xs text-purple-600 hover:text-purple-700 font-medium">
-                          Ver detalles
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-            {activeTab === 'Estadísticas' && (
-              <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <StatCard
-                    title="Total de sesiones"
-                    value="6"
-                    icon={BookOpen}
-                    color="purple"
-                  />
-                  <StatCard
-                    title="Puntuación media"
-                    value="36%"
-                    icon={Target}
-                    color="blue"
-                  />
-                  <StatCard
-                    title="Mejor puntuación"
-                    value="63%"
-                    icon={Trophy}
-                    color="green"
-                  />
-                  <StatCard
-                    title="XP total"
-                    value="0"
-                    icon={Star}
-                    color="orange"
+          {/* Tab: Configuración */}
+          <TabsContent value="settings" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Settings className="h-5 w-5 mr-2" />
+                  Configuración del Perfil
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="full_name">Nombre completo</Label>
+                  <Input
+                    id="full_name"
+                    value={formData.full_name}
+                    onChange={(e) => setFormData(prev => ({ ...prev, full_name: e.target.value }))}
+                    placeholder="Tu nombre completo"
                   />
                 </div>
-              </div>
-            )}
 
-            {activeTab === 'Insignias' && (
-              <div className="bg-white rounded-xl p-12 shadow-sm border border-gray-200 text-center">
-                <Trophy className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Aún no tienes insignias</h3>
-                <p className="text-gray-600">Completa entrenamientos y logra objetivos para ganar insignias</p>
-              </div>
-            )}
-          </div>
-        </div>
+                <div className="space-y-2">
+                  <Label htmlFor="avatar_url">URL del avatar</Label>
+                  <Input
+                    id="avatar_url"
+                    value={formData.avatar_url}
+                    onChange={(e) => setFormData(prev => ({ ...prev, avatar_url: e.target.value }))}
+                    placeholder="https://ejemplo.com/avatar.jpg"
+                  />
+                </div>
+
+                <div className="pt-4">
+                  <Button onClick={updateProfile} disabled={saving}>
+                    {saving ? 'Guardando...' : 'Guardar cambios'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Información de la cuenta</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label>Email (no editable)</Label>
+                  <Input value={profile?.email || ''} disabled />
+                </div>
+                <div>
+                  <Label>ID de usuario</Label>
+                  <Input value={user?.id || ''} disabled className="font-mono text-xs" />
+                </div>
+                <div>
+                  <Label>Fecha de registro</Label>
+                  <Input 
+                    value={profile?.created_at ? formatJoinDate(profile.created_at) : 'N/A'} 
+                    disabled 
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );

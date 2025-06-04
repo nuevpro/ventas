@@ -1,502 +1,418 @@
 
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, Eye, Play, Download, Phone, MessageSquare, Clock, Star, Users, Calendar } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import StatCard from '@/components/StatCard';
-import { Target, Trophy, BookOpen } from 'lucide-react';
-
-interface TrainingSession {
-  id: string;
-  title: string;
-  scenario: string;
-  type: 'conversation' | 'call_simulation' | 'presentation';
-  date: string;
-  duration: string;
-  score: number;
-  voice: {
-    name: string;
-    language: string;
-    gender: string;
-    age?: string;
-  };
-  client: {
-    name: string;
-    personality: string;
-    objections: string[];
-  };
-  metrics: {
-    wordsPerMinute: number;
-    interruptionCount: number;
-    emotionalTone: string;
-    keywordsUsed: string[];
-    clientSatisfaction: number;
-  };
-  transcript: {
-    messages: Array<{
-      speaker: 'user' | 'ai';
-      content: string;
-      timestamp: string;
-      audioUrl?: string;
-    }>;
-  };
-  evaluation: {
-    strengths: string[];
-    improvements: string[];
-    overallRating: number;
-    specificFeedback: string;
-  };
-  tags: string[];
-  isStarred: boolean;
-}
+import { Calendar, Clock, Trophy, TrendingUp, Search, Filter, BarChart3 } from 'lucide-react';
+import { useSessionManager } from '@/components/training/SessionManager';
+import { useActivityLog } from '@/hooks/useActivityLog';
+import { useUserStats } from '@/hooks/useUserStats';
 
 const History = () => {
-  const [sessions, setSessions] = useState<TrainingSession[]>([]);
-  const [filteredSessions, setFilteredSessions] = useState<TrainingSession[]>([]);
-  const [selectedFilter, setSelectedFilter] = useState('all');
+  const sessionManager = useSessionManager();
+  const { activities, loading: activitiesLoading } = useActivityLog();
+  const { stats } = useUserStats();
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedSession, setSelectedSession] = useState<TrainingSession | null>(null);
-
-  // Sample data - En producción esto vendría del localStorage/Supabase
-  const sampleSessions: TrainingSession[] = [
-    {
-      id: '1',
-      title: 'Llamada de Ventas - Cliente Escéptico',
-      scenario: 'sales-cold-call',
-      type: 'call_simulation',
-      date: '2025-01-15',
-      duration: '12:34',
-      score: 85,
-      voice: { name: 'George', language: 'english', gender: 'male', age: 'middle' },
-      client: { 
-        name: 'George Thompson', 
-        personality: 'Cliente ocupado y escéptico',
-        objections: ['No tengo tiempo', 'Ya tengo proveedor', 'Es muy caro']
-      },
-      metrics: {
-        wordsPerMinute: 140,
-        interruptionCount: 3,
-        emotionalTone: 'Profesional',
-        keywordsUsed: ['beneficio', 'solución', 'ahorro', 'eficiencia'],
-        clientSatisfaction: 7.8
-      },
-      transcript: {
-        messages: [
-          { speaker: 'ai', content: '¡Hola! Habla George Thompson. ¿Tengo unos minutos de su tiempo?', timestamp: '00:00' },
-          { speaker: 'user', content: 'Buenos días, claro, dígame en qué puedo ayudarle.', timestamp: '00:05' },
-          { speaker: 'ai', content: 'No tengo mucho tiempo, pero escucho...', timestamp: '00:10' }
-        ]
-      },
-      evaluation: {
-        strengths: ['Excelente apertura', 'Manejo de objeciones efectivo', 'Tono profesional consistente'],
-        improvements: ['Podría hacer más preguntas abiertas', 'Mejorar el cierre de la venta'],
-        overallRating: 8.5,
-        specificFeedback: 'Muy buena gestión de la conversación. El cliente mostró interés gradual.'
-      },
-      tags: ['ventas', 'llamada-fría', 'objeciones'],
-      isStarred: true
-    },
-    {
-      id: '2',
-      title: 'Entrevista de Trabajo - Desarrollador Senior',
-      scenario: 'recruitment-interview',
-      type: 'conversation',
-      date: '2025-01-14',
-      duration: '18:45',
-      score: 92,
-      voice: { name: 'Charlotte', language: 'english', gender: 'female', age: 'middle' },
-      client: { 
-        name: 'Charlotte Williams', 
-        personality: 'Entrevistadora profesional y detallista',
-        objections: ['Experiencia en tecnologías específicas', 'Trabajo en equipo', 'Liderazgo']
-      },
-      metrics: {
-        wordsPerMinute: 120,
-        interruptionCount: 1,
-        emotionalTone: 'Confiado',
-        keywordsUsed: ['experiencia', 'proyecto', 'equipo', 'liderazgo', 'tecnología'],
-        clientSatisfaction: 9.2
-      },
-      transcript: {
-        messages: [
-          { speaker: 'ai', content: 'Buenos días, soy Charlotte Williams, gerente de RRHH. Gracias por venir.', timestamp: '00:00' },
-          { speaker: 'user', content: 'Buenos días, Charlotte. Es un placer estar aquí.', timestamp: '00:05' }
-        ]
-      },
-      evaluation: {
-        strengths: ['Respuestas claras y estructuradas', 'Excelentes ejemplos técnicos', 'Demostró liderazgo'],
-        improvements: ['Podría ser más específico en algunos ejemplos'],
-        overallRating: 9.2,
-        specificFeedback: 'Entrevista excepcional. Candidato muy sólido con gran potencial.'
-      },
-      tags: ['entrevista', 'rrhh', 'técnico'],
-      isStarred: false
-    }
-  ];
-
-  const globalStats = [
-    { title: 'Total de sesiones', value: sessions.length.toString(), icon: BookOpen, color: 'purple' as const },
-    { title: 'Puntuación media', value: `${Math.round(sessions.reduce((acc, s) => acc + s.score, 0) / sessions.length || 0)}%`, icon: Target, color: 'blue' as const },
-    { title: 'Mejor puntuación', value: `${Math.max(...sessions.map(s => s.score), 0)}%`, icon: Trophy, color: 'green' as const },
-    { title: 'Tiempo total', value: calculateTotalTime(sessions), icon: Clock, color: 'orange' as const },
-  ];
-
-  function calculateTotalTime(sessions: TrainingSession[]): string {
-    const totalMinutes = sessions.reduce((acc, session) => {
-      const [minutes, seconds] = session.duration.split(':').map(Number);
-      return acc + minutes + (seconds / 60);
-    }, 0);
-    
-    const hours = Math.floor(totalMinutes / 60);
-    const minutes = Math.round(totalMinutes % 60);
-    return `${hours}h ${minutes}min`;
-  }
+  const [sortBy, setSortBy] = useState<'date' | 'score' | 'duration'>('date');
+  const [filterBy, setFilterBy] = useState<'all' | 'completed' | 'high_score'>('all');
 
   useEffect(() => {
-    // Load sessions from localStorage
-    const savedSessions = localStorage.getItem('trainingSessions');
-    if (savedSessions) {
-      setSessions(JSON.parse(savedSessions));
-    } else {
-      setSessions(sampleSessions);
-      localStorage.setItem('trainingSessions', JSON.stringify(sampleSessions));
-    }
+    loadSessions();
   }, []);
 
-  useEffect(() => {
-    let filtered = sessions;
+  const loadSessions = async () => {
+    try {
+      setLoading(true);
+      const sessionsData = await sessionManager.getUserSessions(50);
+      setSessions(sessionsData);
+    } catch (error) {
+      console.error('Error loading sessions:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    // Apply filters
-    if (selectedFilter !== 'all') {
-      filtered = filtered.filter(session => {
-        switch (selectedFilter) {
-          case 'call_simulation': return session.type === 'call_simulation';
-          case 'conversation': return session.type === 'conversation';
-          case 'presentation': return session.type === 'presentation';
-          case 'starred': return session.isStarred;
-          case 'high_score': return session.score >= 80;
-          default: return true;
-        }
+  const filteredSessions = sessions
+    .filter(session => {
+      // Filtro de búsqueda
+      if (searchTerm) {
+        const searchLower = searchTerm.toLowerCase();
+        return (
+          (session.scenario_title || '').toLowerCase().includes(searchLower) ||
+          (session.client_emotion || '').toLowerCase().includes(searchLower)
+        );
+      }
+      return true;
+    })
+    .filter(session => {
+      // Filtro por tipo
+      switch (filterBy) {
+        case 'completed':
+          return session.completed_at;
+        case 'high_score':
+          return (session.score || 0) >= 80;
+        default:
+          return true;
+      }
+    })
+    .sort((a, b) => {
+      // Ordenamiento
+      switch (sortBy) {
+        case 'score':
+          return (b.score || 0) - (a.score || 0);
+        case 'duration':
+          return (b.duration_minutes || 0) - (a.duration_minutes || 0);
+        case 'date':
+        default:
+          return new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime();
+      }
+    });
+
+  const getScoreColor = (score: number) => {
+    if (score >= 90) return 'bg-green-500';
+    if (score >= 80) return 'bg-blue-500';
+    if (score >= 70) return 'bg-yellow-500';
+    if (score >= 60) return 'bg-orange-500';
+    return 'bg-red-500';
+  };
+
+  const getScoreLabel = (score: number) => {
+    if (score >= 90) return 'Excelente';
+    if (score >= 80) return 'Muy Bueno';
+    if (score >= 70) return 'Bueno';
+    if (score >= 60) return 'Regular';
+    return 'Necesita Mejora';
+  };
+
+  const formatDuration = (minutes: number) => {
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    if (hours > 0) {
+      return `${hours}h ${mins}m`;
+    }
+    return `${mins}m`;
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('es-ES', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const getActivityDescription = (activity: any) => {
+    switch (activity.activity_type) {
+      case 'session_completed':
+        return `Sesión completada con ${activity.activity_data?.score || 0}% de puntuación`;
+      case 'achievement_earned':
+        return `Logro desbloqueado: ${activity.activity_data?.achievement_title || 'Nuevo logro'}`;
+      case 'challenge_joined':
+        return `Se unió al desafío: ${activity.activity_data?.challenge_title || 'Nuevo desafío'}`;
+      default:
+        return activity.activity_type;
+    }
+  };
+
+  const monthlyStats = React.useMemo(() => {
+    const last6Months = [];
+    const now = new Date();
+    
+    for (let i = 5; i >= 0; i--) {
+      const month = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const monthSessions = sessions.filter(session => {
+        const sessionDate = new Date(session.created_at || '');
+        return sessionDate.getMonth() === month.getMonth() && 
+               sessionDate.getFullYear() === month.getFullYear();
+      });
+      
+      last6Months.push({
+        month: month.toLocaleDateString('es-ES', { month: 'short', year: 'numeric' }),
+        sessions: monthSessions.length,
+        avgScore: monthSessions.length > 0 
+          ? Math.round(monthSessions.reduce((sum, s) => sum + (s.score || 0), 0) / monthSessions.length)
+          : 0,
+        totalTime: monthSessions.reduce((sum, s) => sum + (s.duration_minutes || 0), 0)
       });
     }
-
-    // Apply search
-    if (searchTerm) {
-      filtered = filtered.filter(session =>
-        session.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        session.scenario.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        session.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()))
-      );
-    }
-
-    setFilteredSessions(filtered);
-  }, [sessions, selectedFilter, searchTerm]);
-
-  const toggleStar = (sessionId: string) => {
-    const updatedSessions = sessions.map(session =>
-      session.id === sessionId ? { ...session, isStarred: !session.isStarred } : session
-    );
-    setSessions(updatedSessions);
-    localStorage.setItem('trainingSessions', JSON.stringify(updatedSessions));
-  };
-
-  const exportSession = (session: TrainingSession) => {
-    const dataStr = JSON.stringify(session, null, 2);
-    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
     
-    const exportFileDefaultName = `training_session_${session.id}_${session.date}.json`;
-    
-    const linkElement = document.createElement('a');
-    linkElement.setAttribute('href', dataUri);
-    linkElement.setAttribute('download', exportFileDefaultName);
-    linkElement.click();
-  };
+    return last6Months;
+  }, [sessions]);
 
-  return (
-    <div className="p-6 bg-gray-50 dark:bg-gray-900 min-h-screen">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Historial de Entrenamiento</h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-2">
-            Revisa tus sesiones de entrenamiento, llamadas simuladas y análisis detallados
-          </p>
-        </div>
-
-        {/* Global Stats */}
-        <div className="mb-8">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Estadísticas Globales</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {globalStats.map((stat, index) => (
-              <StatCard
-                key={index}
-                title={stat.title}
-                value={stat.value}
-                icon={stat.icon}
-                color={stat.color}
-              />
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
+        <div className="max-w-7xl mx-auto">
+          <div className="animate-pulse space-y-6">
+            {[...Array(5)].map((_, i) => (
+              <Card key={i}>
+                <CardContent className="p-6">
+                  <div className="h-20 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                </CardContent>
+              </Card>
             ))}
           </div>
         </div>
+      </div>
+    );
+  }
 
+  return (
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
+      <div className="max-w-7xl mx-auto space-y-6">
+        {/* Header */}
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
+              Historial
+            </h1>
+            <p className="text-gray-600 dark:text-gray-400">
+              Revisa tu progreso y actividad de entrenamiento
+            </p>
+          </div>
+        </div>
+
+        {/* Estadísticas rápidas */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <Card>
+            <CardContent className="flex items-center p-6">
+              <Trophy className="h-8 w-8 text-yellow-600 mr-4" />
+              <div>
+                <div className="text-2xl font-bold">{sessions.length}</div>
+                <div className="text-sm text-gray-600">Sesiones Totales</div>
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardContent className="flex items-center p-6">
+              <TrendingUp className="h-8 w-8 text-blue-600 mr-4" />
+              <div>
+                <div className="text-2xl font-bold">{Number(stats?.average_score || 0).toFixed(1)}%</div>
+                <div className="text-sm text-gray-600">Puntuación Promedio</div>
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardContent className="flex items-center p-6">
+              <Clock className="h-8 w-8 text-green-600 mr-4" />
+              <div>
+                <div className="text-2xl font-bold">
+                  {Math.floor((stats?.total_time_minutes || 0) / 60)}h
+                </div>
+                <div className="text-sm text-gray-600">Tiempo Total</div>
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardContent className="flex items-center p-6">
+              <BarChart3 className="h-8 w-8 text-purple-600 mr-4" />
+              <div>
+                <div className="text-2xl font-bold">{stats?.best_score || 0}%</div>
+                <div className="text-sm text-gray-600">Mejor Puntuación</div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Gráfico mensual */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Progreso Mensual</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-6 gap-4">
+              {monthlyStats.map((month, index) => (
+                <div key={index} className="text-center">
+                  <div className="text-xs text-gray-500 mb-2">{month.month}</div>
+                  <div className="bg-blue-100 dark:bg-blue-900 rounded-lg p-3 space-y-1">
+                    <div className="text-lg font-bold text-blue-600">{month.sessions}</div>
+                    <div className="text-xs text-gray-600">sesiones</div>
+                    <div className="text-sm font-medium">{month.avgScore}%</div>
+                    <div className="text-xs text-gray-600">promedio</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Tabs para sesiones y actividad */}
         <Tabs defaultValue="sessions" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="sessions">Sesiones</TabsTrigger>
-            <TabsTrigger value="analytics">Análisis</TabsTrigger>
-            <TabsTrigger value="reports">Reportes</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="sessions">Sesiones ({filteredSessions.length})</TabsTrigger>
+            <TabsTrigger value="activity">Actividad ({activities.length})</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="sessions">
-            {/* Filters and Search */}
-            <Card className="mb-6">
-              <CardContent className="p-6">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0 gap-4">
-                  <div className="flex items-center space-x-4">
+          <TabsContent value="sessions" className="space-y-6">
+            {/* Filtros y búsqueda */}
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex flex-col md:flex-row gap-4">
+                  <div className="flex-1">
                     <div className="relative">
                       <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                       <Input
                         placeholder="Buscar sesiones..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        className="pl-10 w-64"
+                        className="pl-10"
                       />
                     </div>
-                    
-                    <Select value={selectedFilter} onValueChange={setSelectedFilter}>
-                      <SelectTrigger className="w-48">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Todas las sesiones</SelectItem>
-                        <SelectItem value="call_simulation">Llamadas simuladas</SelectItem>
-                        <SelectItem value="conversation">Conversaciones</SelectItem>
-                        <SelectItem value="presentation">Presentaciones</SelectItem>
-                        <SelectItem value="starred">Destacadas</SelectItem>
-                        <SelectItem value="high_score">Puntuación alta (80+)</SelectItem>
-                      </SelectContent>
-                    </Select>
                   </div>
+                  
+                  <Select value={sortBy} onValueChange={(value: any) => setSortBy(value)}>
+                    <SelectTrigger className="w-48">
+                      <SelectValue placeholder="Ordenar por" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="date">Fecha</SelectItem>
+                      <SelectItem value="score">Puntuación</SelectItem>
+                      <SelectItem value="duration">Duración</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  
+                  <Select value={filterBy} onValueChange={(value: any) => setFilterBy(value)}>
+                    <SelectTrigger className="w-48">
+                      <SelectValue placeholder="Filtrar por" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas</SelectItem>
+                      <SelectItem value="completed">Completadas</SelectItem>
+                      <SelectItem value="high_score">Puntuación Alta (80%+)</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Sessions List */}
-            <div className="space-y-4">
-              {filteredSessions.map((session) => (
-                <Card key={session.id} className="hover:shadow-md transition-shadow">
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-3 mb-2">
-                          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                            {session.title}
-                          </h3>
-                          <Badge variant={session.type === 'call_simulation' ? 'default' : 'secondary'}>
-                            {session.type === 'call_simulation' && <Phone className="h-3 w-3 mr-1" />}
-                            {session.type === 'conversation' && <MessageSquare className="h-3 w-3 mr-1" />}
-                            {session.type === 'presentation' && <Users className="h-3 w-3 mr-1" />}
-                            {session.type === 'call_simulation' ? 'Llamada' : 
-                             session.type === 'conversation' ? 'Conversación' : 'Presentación'}
+            {/* Lista de sesiones */}
+            {filteredSessions.length === 0 ? (
+              <Card>
+                <CardContent className="p-12 text-center">
+                  <Clock className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+                    No hay sesiones para mostrar
+                  </h3>
+                  <p className="text-gray-600 dark:text-gray-400">
+                    Comienza una nueva sesión de entrenamiento para ver tu historial aquí
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="space-y-4">
+                {filteredSessions.map((session) => (
+                  <Card key={session.id} className="hover:shadow-md transition-shadow">
+                    <CardContent className="p-6">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-3 mb-2">
+                            <h3 className="font-semibold text-lg">
+                              {session.scenario_title || 'Sesión de Entrenamiento'}
+                            </h3>
+                            {session.completed_at && (
+                              <Badge
+                                className={`${getScoreColor(session.score || 0)} text-white`}
+                              >
+                                {session.score || 0}% - {getScoreLabel(session.score || 0)}
+                              </Badge>
+                            )}
+                          </div>
+                          
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-600">
+                            <div className="flex items-center space-x-1">
+                              <Calendar className="h-4 w-4" />
+                              <span>{formatDate(session.created_at || '')}</span>
+                            </div>
+                            <div className="flex items-center space-x-1">
+                              <Clock className="h-4 w-4" />
+                              <span>{formatDuration(session.duration_minutes || 0)}</span>
+                            </div>
+                            <div>
+                              <span>Emoción: {session.client_emotion || 'N/A'}</span>
+                            </div>
+                            <div>
+                              <span>Modo: {session.interaction_mode || 'N/A'}</span>
+                            </div>
+                          </div>
+                          
+                          {(session.total_messages || 0) > 0 && (
+                            <div className="mt-2 text-sm text-gray-500">
+                              {session.total_messages} mensajes • {session.user_words_count || 0} palabras del usuario
+                            </div>
+                          )}
+                        </div>
+                        
+                        <div className="flex flex-col items-end space-y-2">
+                          <Badge variant={session.completed_at ? 'default' : 'secondary'}>
+                            {session.completed_at ? 'Completada' : 'En progreso'}
                           </Badge>
-                          {session.isStarred && <Star className="h-4 w-4 text-yellow-500 fill-current" />}
-                        </div>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm text-gray-600 dark:text-gray-400">
-                          <div className="flex items-center space-x-2">
-                            <Calendar className="h-4 w-4" />
-                            <span>{new Date(session.date).toLocaleDateString()}</span>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <Clock className="h-4 w-4" />
-                            <span>{session.duration}</span>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <Users className="h-4 w-4" />
-                            <span>{session.voice.name} ({session.voice.language})</span>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <Target className="h-4 w-4" />
-                            <span>Satisfacción: {session.metrics.clientSatisfaction}/10</span>
-                          </div>
-                        </div>
-
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {session.tags.map((tag, index) => (
-                            <Badge key={index} variant="outline" className="text-xs">
-                              {tag}
-                            </Badge>
-                          ))}
                         </div>
                       </div>
-                      
-                      <div className="flex items-center space-x-4">
-                        <div className="text-right">
-                          <div className={`text-2xl font-bold ${session.score >= 80 ? 'text-green-600' : session.score >= 60 ? 'text-yellow-600' : 'text-red-600'}`}>
-                            {session.score}%
-                          </div>
-                          <div className="text-sm text-gray-500">Puntuación</div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="activity" className="space-y-6">
+            {activitiesLoading ? (
+              <div className="space-y-4">
+                {[...Array(5)].map((_, i) => (
+                  <Card key={i} className="animate-pulse">
+                    <CardContent className="p-6">
+                      <div className="h-16 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : activities.length === 0 ? (
+              <Card>
+                <CardContent className="p-12 text-center">
+                  <TrendingUp className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+                    No hay actividad registrada
+                  </h3>
+                  <p className="text-gray-600 dark:text-gray-400">
+                    Tu actividad aparecerá aquí conforme uses la plataforma
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="space-y-4">
+                {activities.map((activity) => (
+                  <Card key={activity.id}>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <p className="font-medium">{getActivityDescription(activity)}</p>
+                          <p className="text-sm text-gray-500">
+                            {formatDate(activity.created_at!)}
+                          </p>
                         </div>
-                        
-                        <div className="flex space-x-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => toggleStar(session.id)}
-                          >
-                            <Star className={`h-4 w-4 ${session.isStarred ? 'text-yellow-500 fill-current' : ''}`} />
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => exportSession(session)}
-                          >
-                            <Download className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            onClick={() => setSelectedSession(session)}
-                          >
-                            <Eye className="h-4 w-4 mr-2" />
-                            Ver detalles
-                          </Button>
-                        </div>
+                        {activity.points_earned > 0 && (
+                          <Badge variant="secondary">
+                            +{activity.points_earned} XP
+                          </Badge>
+                        )}
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-              
-              {filteredSessions.length === 0 && (
-                <Card>
-                  <CardContent className="p-12 text-center">
-                    <BookOpen className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-                    <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                      No se encontraron sesiones
-                    </h3>
-                    <p className="text-gray-500 dark:text-gray-400">
-                      Intenta cambiar los filtros o realiza tu primera sesión de entrenamiento.
-                    </p>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-          </TabsContent>
-
-          <TabsContent value="analytics">
-            <Card>
-              <CardHeader>
-                <CardTitle>Análisis Detallado</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-gray-600 dark:text-gray-400">
-                  Próximamente: Gráficos de progreso, análisis de tendencias y métricas avanzadas.
-                </p>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="reports">
-            <Card>
-              <CardHeader>
-                <CardTitle>Reportes Personalizados</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-gray-600 dark:text-gray-400">
-                  Próximamente: Generación de reportes personalizados y exportación de datos.
-                </p>
-              </CardContent>
-            </Card>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
           </TabsContent>
         </Tabs>
-
-        {/* Session Detail Modal */}
-        {selectedSession && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <Card className="max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle>{selectedSession.title}</CardTitle>
-                  <Button variant="outline" onClick={() => setSelectedSession(null)}>
-                    Cerrar
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {/* Session Overview */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="text-center p-4 border rounded-lg">
-                    <div className="text-2xl font-bold text-purple-600">{selectedSession.score}%</div>
-                    <div className="text-sm text-gray-500">Puntuación</div>
-                  </div>
-                  <div className="text-center p-4 border rounded-lg">
-                    <div className="text-2xl font-bold text-blue-600">{selectedSession.duration}</div>
-                    <div className="text-sm text-gray-500">Duración</div>
-                  </div>
-                  <div className="text-center p-4 border rounded-lg">
-                    <div className="text-2xl font-bold text-green-600">{selectedSession.metrics.clientSatisfaction}</div>
-                    <div className="text-sm text-gray-500">Satisfacción</div>
-                  </div>
-                  <div className="text-center p-4 border rounded-lg">
-                    <div className="text-2xl font-bold text-orange-600">{selectedSession.metrics.wordsPerMinute}</div>
-                    <div className="text-sm text-gray-500">Palabras/min</div>
-                  </div>
-                </div>
-
-                {/* Evaluation */}
-                <div>
-                  <h3 className="text-lg font-semibold mb-3">Evaluación</h3>
-                  <div className="space-y-4">
-                    <div>
-                      <h4 className="font-medium text-green-600 mb-2">Fortalezas</h4>
-                      <ul className="list-disc list-inside space-y-1">
-                        {selectedSession.evaluation.strengths.map((strength, index) => (
-                          <li key={index} className="text-sm text-gray-600 dark:text-gray-400">{strength}</li>
-                        ))}
-                      </ul>
-                    </div>
-                    <div>
-                      <h4 className="font-medium text-orange-600 mb-2">Áreas de mejora</h4>
-                      <ul className="list-disc list-inside space-y-1">
-                        {selectedSession.evaluation.improvements.map((improvement, index) => (
-                          <li key={index} className="text-sm text-gray-600 dark:text-gray-400">{improvement}</li>
-                        ))}
-                      </ul>
-                    </div>
-                    <div>
-                      <h4 className="font-medium mb-2">Feedback específico</h4>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">{selectedSession.evaluation.specificFeedback}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Transcript Preview */}
-                <div>
-                  <h3 className="text-lg font-semibold mb-3">Transcripción (Primeros mensajes)</h3>
-                  <div className="space-y-2 max-h-48 overflow-y-auto border rounded-lg p-4">
-                    {selectedSession.transcript.messages.slice(0, 10).map((message, index) => (
-                      <div key={index} className={`flex ${message.speaker === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[80%] p-2 rounded-lg text-sm ${
-                          message.speaker === 'user' 
-                            ? 'bg-purple-100 dark:bg-purple-900 text-purple-900 dark:text-purple-100' 
-                            : 'bg-gray-100 dark:bg-gray-800'
-                        }`}>
-                          <div className="font-medium text-xs mb-1">
-                            {message.speaker === 'user' ? 'Usted' : selectedSession.client.name} • {message.timestamp}
-                          </div>
-                          {message.content}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
       </div>
     </div>
   );
