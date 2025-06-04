@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Save, TestTube, Volume2, User, Globe, Users, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -12,6 +11,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 
+// Voice interface for type safety
+interface Voice {
+  id: string;
+  name: string;
+  age: string;
+  accent: string;
+  description: string;
+}
+
 // Comprehensive ElevenLabs voice database organized by categories
 const ELEVENLABS_VOICES = {
   english: {
@@ -20,33 +28,33 @@ const ELEVENLABS_VOICES = {
         { id: 'pNInz6obpgDQGcFmaJgB', name: 'Adam', age: '20-30', accent: 'American', description: 'Joven americano, casual' },
         { id: 'VR6AewLTigWG4xSOukaG', name: 'Arnold', age: '25-35', accent: 'American', description: 'Joven profesional americano' },
         { id: 'ErXwobaYiN019PkySvjV', name: 'Antoni', age: '25-30', accent: 'American', description: 'Joven americano, enérgico' },
-      ],
+      ] as Voice[],
       middle: [
         { id: 'JBFqnCBsd6RMkjVDRZzb', name: 'George', age: '35-45', accent: 'British', description: 'Ejecutivo británico maduro' },
         { id: 'onwK4e9ZLuTAKqWW03F9', name: 'Daniel', age: '40-50', accent: 'British', description: 'Autoritativo británico' },
         { id: 'CwhRBWXzGAHq8TQ4Fs17', name: 'Roger', age: '45-55', accent: 'American', description: 'Maduro americano profesional' },
         { id: 'bIHbv24MWmeRgasZH58o', name: 'Will', age: '35-45', accent: 'American', description: 'Profesional americano' },
-      ],
+      ] as Voice[],
       elderly: [
         { id: 'cgSgspJ2msm6clMCkdW9', name: 'Marcus', age: '55-65', accent: 'British', description: 'Mayor británico distinguido' },
         { id: 'cjVigY5qzO86Huf0OWal', name: 'Eric', age: '60-70', accent: 'American', description: 'Mayor americano sabio' },
-      ]
+      ] as Voice[]
     },
     female: {
       young: [
         { id: '9BWtsMINqrJLrRacOk9x', name: 'Aria', age: '20-30', accent: 'American', description: 'Joven americana natural' },
         { id: 'pFZP5JQG7iQjIQuC4Bku', name: 'Lily', age: '25-30', accent: 'British', description: 'Joven británica elegante' },
         { id: 'XrExE9yKIg1WjnnlVkGX', name: 'Matilda', age: '20-28', accent: 'British', description: 'Joven británica sofisticada' },
-      ],
+      ] as Voice[],
       middle: [
         { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Sarah', age: '30-40', accent: 'American', description: 'Profesional americana' },
         { id: 'XB0fDUnXU5powFXDhCwa', name: 'Charlotte', age: '35-45', accent: 'British', description: 'Ejecutiva británica amigable' },
         { id: 'cgSgspJ2msm6clMCkdW9', name: 'Jessica', age: '30-40', accent: 'American', description: 'Profesional americana versátil' },
-      ],
+      ] as Voice[],
       elderly: [
         { id: 'FGY2WhTYpPnrIDTdsKH5', name: 'Laura', age: '50-60', accent: 'American', description: 'Madura americana distinguida' },
         { id: 'Xb7hH8MSUJpSbSDYk0k2', name: 'Alice', age: '55-65', accent: 'British', description: 'Mayor británica refinada' },
-      ]
+      ] as Voice[]
     }
   },
   spanish: {
@@ -54,42 +62,42 @@ const ELEVENLABS_VOICES = {
       { id: 'g5CIjZEefAph4nQFvHAz', name: 'Diego', age: '30-40', accent: 'Mexican', description: 'Profesional mexicano' },
       { id: 'XrExE9yKIg1WjnnlVkGX', name: 'Carlos', age: '35-45', accent: 'Spanish', description: 'Ejecutivo español' },
       { id: 'TX3LPaxmHKxFdv7VOQHJ', name: 'Miguel', age: '25-35', accent: 'Colombian', description: 'Joven colombiano' },
-    ],
+    ] as Voice[],
     female: [
       { id: 'IKne3meq5aSn9XLyUdCD', name: 'Sofia', age: '25-35', accent: 'Mexican', description: 'Joven mexicana profesional' },
       { id: 'N2lVS1w4EtoT3dr4eOWO', name: 'Carmen', age: '30-40', accent: 'Spanish', description: 'Ejecutiva española' },
       { id: 'SAz9YHcvj6GT2YYXdXww', name: 'Lucia', age: '28-38', accent: 'Argentinian', description: 'Profesional argentina' },
-    ]
+    ] as Voice[]
   },
   french: {
     male: [
       { id: 'nPczCjzI2devNBz1zQrb', name: 'Pierre', age: '35-45', accent: 'Parisian', description: 'Ejecutivo parisino' },
       { id: 'iP95p4xoKVk53GoZ742B', name: 'Jean', age: '40-50', accent: 'French', description: 'Profesional francés maduro' },
-    ],
+    ] as Voice[],
     female: [
       { id: 'pqHfZKP75CvOlQylNhV4', name: 'Marie', age: '30-40', accent: 'Parisian', description: 'Ejecutiva parisina' },
       { id: 'TX3LPaxmHKxFdv7VOQHJ', name: 'Camille', age: '25-35', accent: 'French', description: 'Joven francesa profesional' },
-    ]
+    ] as Voice[]
   },
   german: {
     male: [
       { id: 'pNInz6obpgDQGcFmaJgB', name: 'Hans', age: '40-50', accent: 'German', description: 'Ejecutivo alemán' },
       { id: 'VR6AewLTigWG4xSOukaG', name: 'Klaus', age: '35-45', accent: 'Austrian', description: 'Profesional austriaco' },
-    ],
+    ] as Voice[],
     female: [
       { id: 'ErXwobaYiN019PkySvjV', name: 'Greta', age: '30-40', accent: 'German', description: 'Ejecutiva alemana' },
       { id: 'cgSgspJ2msm6clMCkdW9', name: 'Ingrid', age: '35-45', accent: 'Swiss', description: 'Profesional suiza' },
-    ]
+    ] as Voice[]
   },
   italian: {
     male: [
       { id: 'onwK4e9ZLuTAKqWW03F9', name: 'Marco', age: '30-40', accent: 'Italian', description: 'Ejecutivo italiano' },
       { id: 'CwhRBWXzGAHq8TQ4Fs17', name: 'Giuseppe', age: '45-55', accent: 'Roman', description: 'Profesional romano maduro' },
-    ],
+    ] as Voice[],
     female: [
       { id: 'XB0fDUnXU5powFXDhCwa', name: 'Giulia', age: '28-38', accent: 'Italian', description: 'Ejecutiva italiana' },
       { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Francesca', age: '32-42', accent: 'Milanese', description: 'Profesional milanesa' },
-    ]
+    ] as Voice[]
   }
 };
 
@@ -120,29 +128,33 @@ const ElevenLabsConfig = () => {
   const [isTesting, setIsTesting] = useState(false);
   const { toast } = useToast();
 
-  const getVoicesByCategory = () => {
-    const lang = ELEVENLABS_VOICES[selectedLanguage];
+  const getVoicesByCategory = (): Voice[] => {
+    const lang = ELEVENLABS_VOICES[selectedLanguage as keyof typeof ELEVENLABS_VOICES];
     if (!lang) return [];
     
     if (selectedLanguage === 'english') {
-      const gender = lang[selectedGender];
-      return gender?.[selectedAge] || [];
+      const englishLang = lang as typeof ELEVENLABS_VOICES.english;
+      const gender = englishLang[selectedGender as keyof typeof englishLang];
+      return gender?.[selectedAge as keyof typeof gender] || [];
     } else {
-      return lang[selectedGender] || [];
+      const otherLang = lang as typeof ELEVENLABS_VOICES.spanish;
+      return otherLang[selectedGender as keyof typeof otherLang] || [];
     }
   };
 
-  const getAllVoices = () => {
-    const allVoices = [];
+  const getAllVoices = (): (Voice & { language: string; gender: string; age?: string })[] => {
+    const allVoices: (Voice & { language: string; gender: string; age?: string })[] = [];
     Object.entries(ELEVENLABS_VOICES).forEach(([lang, langData]) => {
       if (lang === 'english') {
-        Object.entries(langData).forEach(([gender, genderData]) => {
+        const englishData = langData as typeof ELEVENLABS_VOICES.english;
+        Object.entries(englishData).forEach(([gender, genderData]) => {
           Object.entries(genderData).forEach(([age, voices]) => {
             allVoices.push(...voices.map(v => ({ ...v, language: lang, gender, age })));
           });
         });
       } else {
-        Object.entries(langData).forEach(([gender, voices]) => {
+        const otherData = langData as typeof ELEVENLABS_VOICES.spanish;
+        Object.entries(otherData).forEach(([gender, voices]) => {
           allVoices.push(...voices.map(v => ({ ...v, language: lang, gender })));
         });
       }
