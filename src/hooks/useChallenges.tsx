@@ -33,6 +33,7 @@ export const useChallenges = () => {
   const loadChallenges = async () => {
     try {
       setLoading(true);
+      setError(null);
 
       // Cargar desafíos públicos
       const { data: publicChallenges, error: publicError } = await supabase
@@ -42,7 +43,10 @@ export const useChallenges = () => {
         .eq('is_custom', false)
         .order('created_at', { ascending: false });
 
-      if (publicError) throw publicError;
+      if (publicError) {
+        console.error('Error loading public challenges:', publicError);
+        throw publicError;
+      }
 
       // Cargar desafíos personalizados
       const { data: userCustomChallenges, error: customError } = await supabase
@@ -52,55 +56,78 @@ export const useChallenges = () => {
         .eq('is_custom', true)
         .order('created_at', { ascending: false });
 
-      if (customError) throw customError;
+      if (customError) {
+        console.error('Error loading custom challenges:', customError);
+        throw customError;
+      }
 
       // Procesar desafíos públicos
       const processedPublic = await Promise.all(
         (publicChallenges || []).map(async (challenge) => {
-          const { count: participantCount } = await supabase
-            .from('challenge_participants')
-            .select('*', { count: 'exact', head: true })
-            .eq('challenge_id', challenge.id);
+          try {
+            const { count: participantCount } = await supabase
+              .from('challenge_participants')
+              .select('*', { count: 'exact', head: true })
+              .eq('challenge_id', challenge.id);
 
-          const { data: participation } = await supabase
-            .from('challenge_participants')
-            .select('*')
-            .eq('challenge_id', challenge.id)
-            .eq('participant_id', user!.id)
-            .eq('participant_type', 'user')
-            .maybeSingle();
+            const { data: participation } = await supabase
+              .from('challenge_participants')
+              .select('*')
+              .eq('challenge_id', challenge.id)
+              .eq('participant_id', user!.id)
+              .eq('participant_type', 'user')
+              .maybeSingle();
 
-          return {
-            ...challenge,
-            is_participating: !!participation,
-            participant_count: participantCount || 0,
-            user_score: participation?.score || null
-          };
+            return {
+              ...challenge,
+              is_participating: !!participation,
+              participant_count: participantCount || 0,
+              user_score: participation?.score || null
+            };
+          } catch (err) {
+            console.error('Error processing public challenge:', challenge.id, err);
+            return {
+              ...challenge,
+              is_participating: false,
+              participant_count: 0,
+              user_score: null
+            };
+          }
         })
       );
 
       // Procesar desafíos personalizados
       const processedCustom = await Promise.all(
         (userCustomChallenges || []).map(async (challenge) => {
-          const { count: participantCount } = await supabase
-            .from('challenge_participants')
-            .select('*', { count: 'exact', head: true })
-            .eq('challenge_id', challenge.id);
+          try {
+            const { count: participantCount } = await supabase
+              .from('challenge_participants')
+              .select('*', { count: 'exact', head: true })
+              .eq('challenge_id', challenge.id);
 
-          const { data: participation } = await supabase
-            .from('challenge_participants')
-            .select('*')
-            .eq('challenge_id', challenge.id)
-            .eq('participant_id', user!.id)
-            .eq('participant_type', 'user')
-            .maybeSingle();
+            const { data: participation } = await supabase
+              .from('challenge_participants')
+              .select('*')
+              .eq('challenge_id', challenge.id)
+              .eq('participant_id', user!.id)
+              .eq('participant_type', 'user')
+              .maybeSingle();
 
-          return {
-            ...challenge,
-            is_participating: !!participation,
-            participant_count: participantCount || 0,
-            user_score: participation?.score || null
-          };
+            return {
+              ...challenge,
+              is_participating: !!participation,
+              participant_count: participantCount || 0,
+              user_score: participation?.score || null
+            };
+          } catch (err) {
+            console.error('Error processing custom challenge:', challenge.id, err);
+            return {
+              ...challenge,
+              is_participating: false,
+              participant_count: 0,
+              user_score: null
+            };
+          }
         })
       );
 
@@ -109,6 +136,11 @@ export const useChallenges = () => {
     } catch (err) {
       console.error('Error loading challenges:', err);
       setError(err instanceof Error ? err.message : 'Error desconocido');
+      toast({
+        title: "Error",
+        description: "No se pudieron cargar los desafíos",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
@@ -138,7 +170,10 @@ export const useChallenges = () => {
         p_team_id: challengeData.teamId
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error creating custom challenge:', error);
+        throw error;
+      }
 
       toast({
         title: "¡Éxito!",
@@ -168,7 +203,10 @@ export const useChallenges = () => {
           participant_type: 'user'
         });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error joining challenge:', error);
+        throw error;
+      }
 
       toast({
         title: "¡Éxito!",
@@ -195,7 +233,10 @@ export const useChallenges = () => {
         .eq('participant_id', user!.id)
         .eq('participant_type', 'user');
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error leaving challenge:', error);
+        throw error;
+      }
 
       toast({
         title: "Abandonado",
@@ -221,7 +262,10 @@ export const useChallenges = () => {
         .eq('id', challengeId)
         .eq('created_by', user!.id);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error deleting challenge:', error);
+        throw error;
+      }
 
       toast({
         title: "Eliminado",

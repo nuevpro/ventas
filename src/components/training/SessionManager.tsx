@@ -63,23 +63,26 @@ export class SessionManager {
     }
 
     try {
+      // Create conversation log object that matches the expected format
+      const conversationLog = {
+        scenario_title: config.scenarioTitle || 'Entrenamiento General',
+        client_emotion: config.clientEmotion || 'neutral',
+        interaction_mode: config.interactionMode || 'call',
+        voice_used: config.selectedVoice || null,
+        session_status: 'in_progress',
+        started_at: new Date().toISOString(),
+        total_messages: 0,
+        user_words_count: 0,
+        ai_words_count: 0
+      };
+
       // Create a session data object that matches the database schema
       const sessionData: DbTrainingSessionInsert = {
         user_id: this.userId,
         scenario_id: config.scenario || 'default',
         duration_minutes: 0,
         score: 0,
-        conversation_log: {
-          scenario_title: config.scenarioTitle || 'Entrenamiento General',
-          client_emotion: config.clientEmotion || 'neutral',
-          interaction_mode: config.interactionMode || 'call',
-          voice_used: config.selectedVoice || null,
-          session_status: 'in_progress',
-          started_at: new Date().toISOString(),
-          total_messages: 0,
-          user_words_count: 0,
-          ai_words_count: 0
-        }
+        conversation_log: conversationLog as any
       };
 
       const { data, error } = await supabase
@@ -101,20 +104,26 @@ export class SessionManager {
       // Extend the session data with our application fields
       this.currentSession = {
         ...data,
-        scenario_title: (data.conversation_log as any)?.scenario_title,
-        client_emotion: (data.conversation_log as any)?.client_emotion,
-        interaction_mode: (data.conversation_log as any)?.interaction_mode,
-        voice_used: (data.conversation_log as any)?.voice_used,
-        session_status: (data.conversation_log as any)?.session_status,
-        started_at: (data.conversation_log as any)?.started_at,
-        total_messages: (data.conversation_log as any)?.total_messages || 0,
-        user_words_count: (data.conversation_log as any)?.user_words_count || 0,
-        ai_words_count: (data.conversation_log as any)?.ai_words_count || 0
+        scenario_title: conversationLog.scenario_title,
+        client_emotion: conversationLog.client_emotion,
+        interaction_mode: conversationLog.interaction_mode,
+        voice_used: conversationLog.voice_used,
+        session_status: conversationLog.session_status,
+        started_at: conversationLog.started_at,
+        total_messages: conversationLog.total_messages,
+        user_words_count: conversationLog.user_words_count,
+        ai_words_count: conversationLog.ai_words_count
       };
 
+      console.log('Session started successfully:', data.id);
       return data.id;
     } catch (error) {
       console.error('Error starting session:', error);
+      this.toast?.({
+        title: "Error",
+        description: "Error al iniciar la sesión",
+        variant: "destructive",
+      });
       return null;
     }
   }
@@ -145,7 +154,7 @@ export class SessionManager {
 
       // Update session counters in conversation_log
       const wordCount = content.split(' ').length;
-      const currentLog = this.currentSession.conversation_log as any || {};
+      const currentLog = (this.currentSession.conversation_log as any) || {};
       
       const updatedLog = {
         ...currentLog,
@@ -160,15 +169,16 @@ export class SessionManager {
 
       await supabase
         .from('training_sessions')
-        .update({ conversation_log: updatedLog })
+        .update({ conversation_log: updatedLog as any })
         .eq('id', this.currentSession.id);
 
       // Update local session
       this.currentSession.total_messages = updatedLog.total_messages;
       this.currentSession.user_words_count = updatedLog.user_words_count;
       this.currentSession.ai_words_count = updatedLog.ai_words_count;
-      this.currentSession.conversation_log = updatedLog;
+      this.currentSession.conversation_log = updatedLog as any;
 
+      console.log('Message saved successfully:', messageData);
       return true;
     } catch (error) {
       console.error('Error saving message:', error);
@@ -187,6 +197,8 @@ export class SessionManager {
           metric_name: metricName,
           metric_value: metricValue
         });
+      
+      console.log('Real-time metric saved:', metricName, metricValue);
     } catch (error) {
       console.error('Error saving metric:', error);
     }
@@ -200,19 +212,26 @@ export class SessionManager {
       const startTime = new Date(this.currentSession.started_at || this.currentSession.created_at || new Date());
       const durationMinutes = Math.floor((endTime.getTime() - startTime.getTime()) / (1000 * 60));
 
-      const currentLog = this.currentSession.conversation_log as any || {};
+      const currentLog = (this.currentSession.conversation_log as any) || {};
       const updatedLog = {
         ...currentLog,
         session_status: 'completed',
         ended_at: endTime.toISOString()
       };
 
+      // Calculate final score based on evaluation
+      let finalScore = 0;
+      if (evaluation && evaluation.overallScore) {
+        finalScore = Math.round(evaluation.overallScore);
+      }
+
       await supabase
         .from('training_sessions')
         .update({
           completed_at: endTime.toISOString(),
           duration_minutes: durationMinutes,
-          conversation_log: updatedLog
+          score: finalScore,
+          conversation_log: updatedLog as any
         })
         .eq('id', this.currentSession.id);
 
@@ -220,6 +239,7 @@ export class SessionManager {
         await this.saveEvaluation(evaluation);
       }
 
+      console.log('Session ended successfully:', this.currentSession.id);
       this.currentSession = null;
     } catch (error) {
       console.error('Error ending session:', error);
@@ -232,11 +252,11 @@ export class SessionManager {
     try {
       const evaluationData = {
         session_id: this.currentSession.id,
-        rapport_score: evaluation.rapport || null,
-        clarity_score: evaluation.clarity || null,
-        empathy_score: evaluation.empathy || null,
-        accuracy_score: evaluation.accuracy || null,
-        overall_score: evaluation.overallScore || null,
+        rapport_score: evaluation.rapport ? Math.round(evaluation.rapport) : null,
+        clarity_score: evaluation.clarity ? Math.round(evaluation.clarity) : null,
+        empathy_score: evaluation.empathy ? Math.round(evaluation.empathy) : null,
+        accuracy_score: evaluation.accuracy ? Math.round(evaluation.accuracy) : null,
+        overall_score: evaluation.overallScore ? Math.round(evaluation.overallScore) : null,
         strengths: evaluation.strengths || [],
         improvements: evaluation.improvements || [],
         specific_feedback: evaluation.specificFeedback || null,
@@ -249,6 +269,8 @@ export class SessionManager {
 
       if (error) {
         console.error('Error saving evaluation:', error);
+      } else {
+        console.log('Evaluation saved successfully');
       }
     } catch (error) {
       console.error('Error saving evaluation:', error);
