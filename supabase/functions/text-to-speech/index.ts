@@ -14,13 +14,27 @@ serve(async (req) => {
   }
 
   try {
-    const { text, voice = 'Aria', model = 'eleven_multilingual_v2' } = await req.json();
+    const { text, voice = 'Sarah', model = 'eleven_multilingual_v2' } = await req.json();
 
     if (!text) {
       throw new Error('Text is required');
     }
 
-    const voiceId = voice === 'Aria' ? '9BWtsMINqrJLrRacOk9x' : 'EXAVITQu4vr4xnSDxMaL'; // Sarah as fallback
+    if (!elevenLabsApiKey) {
+      throw new Error('ElevenLabs API key not configured');
+    }
+
+    console.log('Processing TTS request for text:', text.substring(0, 50) + '...');
+
+    // Voice mapping for different character types
+    const voiceMapping = {
+      'Sarah': 'EXAVITQu4vr4xnSDxMaL',  // Professional female
+      'George': 'JBFqnCBsd6RMkjVDRZzb', // Business male
+      'Charlotte': 'XB0fDUnXU5powFXDhCwa', // Friendly female
+      'Daniel': 'onwK4e9ZLuTAKqWW03F9'  // Authoritative male
+    };
+
+    const voiceId = voiceMapping[voice] || voiceMapping['Sarah'];
 
     const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
       method: 'POST',
@@ -33,19 +47,33 @@ serve(async (req) => {
         text,
         model_id: model,
         voice_settings: {
-          stability: 0.5,
-          similarity_boost: 0.75,
+          stability: 0.6,
+          similarity_boost: 0.8,
+          style: 0.3,
+          use_speaker_boost: true
         },
       }),
     });
 
     if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`ElevenLabs API error: ${error}`);
+      const errorText = await response.text();
+      console.error('ElevenLabs API error:', errorText);
+      throw new Error(`ElevenLabs API error: ${response.status} ${errorText}`);
     }
 
     const arrayBuffer = await response.arrayBuffer();
-    const base64Audio = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+    const uint8Array = new Uint8Array(arrayBuffer);
+    
+    // Convert to base64 more efficiently
+    let binary = '';
+    const chunkSize = 0x8000; // 32KB chunks
+    for (let i = 0; i < uint8Array.length; i += chunkSize) {
+      const chunk = uint8Array.subarray(i, i + chunkSize);
+      binary += String.fromCharCode.apply(null, Array.from(chunk));
+    }
+    const base64Audio = btoa(binary);
+
+    console.log('TTS generation successful');
 
     return new Response(
       JSON.stringify({ audioContent: base64Audio }),
@@ -58,7 +86,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({ error: error.message }),
       {
-        status: 400,
+        status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       },
     );
