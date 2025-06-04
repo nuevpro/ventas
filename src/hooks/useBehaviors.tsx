@@ -3,10 +3,36 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
-import type { Database } from '@/integrations/supabase/types';
 
-type Behavior = Database['public']['Tables']['behaviors']['Row'];
-type BehaviorInsert = Database['public']['Tables']['behaviors']['Insert'];
+// Define the Behavior type manually since it's not in the generated types yet
+type Behavior = {
+  id: string;
+  name: string;
+  scenario_id?: string;
+  client_personality: string;
+  emotional_tone?: string;
+  technical_level?: string;
+  common_objections?: string[] | any;
+  knowledge_base?: string;
+  response_style?: string;
+  voice?: string;
+  is_active?: boolean;
+  created_by?: string;
+  created_at?: string;
+  updated_at?: string;
+};
+
+type BehaviorInsert = {
+  name: string;
+  scenario_id?: string;
+  client_personality: string;
+  emotional_tone?: string;
+  technical_level?: string;
+  common_objections?: string[];
+  knowledge_base?: string;
+  response_style?: string;
+  voice?: string;
+};
 
 export const useBehaviors = () => {
   const { user } = useAuth();
@@ -24,7 +50,8 @@ export const useBehaviors = () => {
       setLoading(true);
       setError(null);
 
-      const { data, error } = await supabase
+      // Use any to bypass TypeScript errors until types are updated
+      const { data, error } = await (supabase as any)
         .from('behaviors')
         .select('*')
         .eq('is_active', true)
@@ -56,7 +83,8 @@ export const useBehaviors = () => {
     voice?: string;
   }) => {
     try {
-      const { data, error } = await supabase.rpc('create_behavior', {
+      // Use any to bypass TypeScript errors until types are updated
+      const { data, error } = await (supabase as any).rpc('create_behavior', {
         p_name: behaviorData.name,
         p_scenario_id: behaviorData.scenario_id || null,
         p_client_personality: behaviorData.client_personality,
@@ -103,7 +131,8 @@ export const useBehaviors = () => {
     voice?: string;
   }) => {
     try {
-      const { data, error } = await supabase.rpc('update_behavior', {
+      // Use any to bypass TypeScript errors until types are updated
+      const { data, error } = await (supabase as any).rpc('update_behavior', {
         p_behavior_id: behaviorId,
         p_name: behaviorData.name,
         p_scenario_id: behaviorData.scenario_id || null,
@@ -141,7 +170,8 @@ export const useBehaviors = () => {
 
   const deleteBehavior = async (behaviorId: string) => {
     try {
-      const { error } = await supabase
+      // Use any to bypass TypeScript errors until types are updated
+      const { error } = await (supabase as any)
         .from('behaviors')
         .delete()
         .eq('id', behaviorId);

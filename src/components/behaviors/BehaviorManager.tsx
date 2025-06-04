@@ -9,9 +9,24 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Plus, Edit, Trash2, User, Brain, MessageSquare, Save } from 'lucide-react';
 import { useBehaviors } from '@/hooks/useBehaviors';
 import { useScenarios } from '@/hooks/useScenarios';
-import type { Database } from '@/integrations/supabase/types';
 
-type Behavior = Database['public']['Tables']['behaviors']['Row'];
+// Define the Behavior type manually since it's not in the generated types yet
+type Behavior = {
+  id: string;
+  name: string;
+  scenario_id?: string;
+  client_personality: string;
+  emotional_tone?: string;
+  technical_level?: string;
+  common_objections?: string[] | any;
+  knowledge_base?: string;
+  response_style?: string;
+  voice?: string;
+  is_active?: boolean;
+  created_by?: string;
+  created_at?: string;
+  updated_at?: string;
+};
 
 const BehaviorManager = () => {
   const { behaviors, loading, createBehavior, updateBehavior, deleteBehavior } = useBehaviors();
