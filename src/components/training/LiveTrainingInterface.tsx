@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -15,6 +14,19 @@ interface LiveTrainingInterfaceProps {
   onBack: () => void;
 }
 
+interface RealTimeMetrics {
+  rapport: number;
+  clarity: number;
+  empathy: number;
+  accuracy: number;
+  responseTime: number;
+  overallScore: number;
+  trend: 'up' | 'down' | 'stable';
+  criticalIssues: string[];
+  positivePoints: string[];
+  suggestions: string[];
+}
+
 const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInterfaceProps) => {
   const [isActive, setIsActive] = useState(false);
   const [isListening, setIsListening] = useState(false);
@@ -24,14 +36,14 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
   const [currentUserText, setCurrentUserText] = useState('');
   const [sessionTime, setSessionTime] = useState(0);
   const [callStatus, setCallStatus] = useState('connecting'); // connecting, ringing, connected, ended
-  const [realTimeMetrics, setRealTimeMetrics] = useState({
+  const [realTimeMetrics, setRealTimeMetrics] = useState<RealTimeMetrics>({
     rapport: 75,
     clarity: 80,
     empathy: 70,
     accuracy: 85,
     responseTime: 2.1,
     overallScore: 77,
-    trend: 'stable' as const,
+    trend: 'stable',
     criticalIssues: [],
     positivePoints: ['Tono profesional', 'Información precisa'],
     suggestions: []
@@ -241,7 +253,7 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
       clarity: Math.max(0, Math.min(100, prev.clarity + (Math.random() * 4 - 2))),
       empathy: Math.max(0, Math.min(100, prev.empathy + (Math.random() * 8 - 4))),
       accuracy: Math.max(0, Math.min(100, prev.accuracy + (Math.random() * 6 - 3))),
-      trend: Math.random() > 0.6 ? 'up' : Math.random() > 0.3 ? 'stable' : 'down'
+      trend: (Math.random() > 0.6 ? 'up' : Math.random() > 0.3 ? 'stable' : 'down') as 'up' | 'down' | 'stable'
     }));
   };
 
