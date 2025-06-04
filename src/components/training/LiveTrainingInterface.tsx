@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -199,7 +198,7 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
       setMessages([aiMessage]);
       
       if (sessionId) {
-        await sessionManager.saveMessage(data.response, 'ai', sessionTime, undefined);
+        await sessionManager.saveMessage(sessionId, data.response, 'ai', sessionTime);
       }
 
       if (audioEnabled && config.interactionMode === 'call' && selectedVoice) {
@@ -269,7 +268,7 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
     setMessages(prev => [...prev, userMessage]);
     
     if (sessionId) {
-      await sessionManager.saveMessage(content, 'user', sessionTime);
+      await sessionManager.saveMessage(sessionId, content, 'user', sessionTime);
     }
 
     setIsSpeaking(true);
@@ -302,7 +301,7 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
       setMessages(prev => [...prev, aiMessage]);
       
       if (sessionId) {
-        await sessionManager.saveMessage(data.response, 'ai', sessionTime);
+        await sessionManager.saveMessage(sessionId, data.response, 'ai', sessionTime);
       }
 
       // Update real-time metrics with actual analysis
@@ -360,11 +359,11 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
     setRealTimeMetrics(newMetrics);
     
     if (sessionId) {
-      await sessionManager.saveRealTimeMetric('overall_score', newMetrics.overallScore);
-      await sessionManager.saveRealTimeMetric('rapport_score', newMetrics.rapport);
-      await sessionManager.saveRealTimeMetric('clarity_score', newMetrics.clarity);
-      await sessionManager.saveRealTimeMetric('empathy_score', newMetrics.empathy);
-      await sessionManager.saveRealTimeMetric('accuracy_score', newMetrics.accuracy);
+      await sessionManager.saveRealTimeMetric(sessionId, 'overall_score', newMetrics.overallScore);
+      await sessionManager.saveRealTimeMetric(sessionId, 'rapport_score', newMetrics.rapport);
+      await sessionManager.saveRealTimeMetric(sessionId, 'clarity_score', newMetrics.clarity);
+      await sessionManager.saveRealTimeMetric(sessionId, 'empathy_score', newMetrics.empathy);
+      await sessionManager.saveRealTimeMetric(sessionId, 'accuracy_score', newMetrics.accuracy);
     }
   };
 
@@ -476,7 +475,9 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
         voiceUsed: selectedVoice
       };
 
-      await sessionManager.endSession(evaluation);
+      if (sessionId) {
+        await sessionManager.endSession(sessionId, evaluation.overallScore);
+      }
       onComplete(evaluation);
     } catch (error) {
       console.error('Error evaluating session:', error);
@@ -497,7 +498,9 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
         voiceUsed: selectedVoice
       };
       
-      await sessionManager.endSession(fallbackEvaluation);
+      if (sessionId) {
+        await sessionManager.endSession(sessionId, fallbackEvaluation.overallScore);
+      }
       onComplete(fallbackEvaluation);
     }
   };
