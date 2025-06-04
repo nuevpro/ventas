@@ -50,12 +50,27 @@ export const useAchievements = () => {
 
       setAvailableAchievements(allAchievements || []);
 
-      // Obtener los logros del usuario
+      // Obtener los logros del usuario con join específico
       const { data: userAchievements, error: userError } = await supabase
         .from('user_achievements')
         .select(`
-          *,
-          achievement:achievements(*)
+          id,
+          user_id,
+          achievement_id,
+          progress,
+          target,
+          earned_at,
+          achievements:achievement_id (
+            id,
+            title,
+            description,
+            icon,
+            category,
+            xp_reward,
+            requirements,
+            is_active,
+            created_at
+          )
         `)
         .eq('user_id', user.id);
 
@@ -65,15 +80,23 @@ export const useAchievements = () => {
       }
 
       // Transformar los datos para que coincidan con el tipo UserAchievement
-      const transformedAchievements: UserAchievement[] = (userAchievements || []).map(ua => ({
-        id: ua.id,
-        user_id: ua.user_id || '',
-        achievement_id: ua.achievement_id || '',
-        progress: ua.progress || 0,
-        target: ua.target || 1,
-        earned_at: ua.earned_at,
-        achievement: ua.achievement as Achievement
-      }));
+      const transformedAchievements: UserAchievement[] = (userAchievements || []).map(ua => {
+        const achievementData = ua.achievements;
+        if (!achievementData || typeof achievementData !== 'object') {
+          console.warn('Missing achievement data for user achievement:', ua.id);
+          return null;
+        }
+
+        return {
+          id: ua.id,
+          user_id: ua.user_id || '',
+          achievement_id: ua.achievement_id || '',
+          progress: ua.progress || 0,
+          target: ua.target || 1,
+          earned_at: ua.earned_at,
+          achievement: achievementData as Achievement
+        };
+      }).filter(Boolean) as UserAchievement[];
 
       setAchievements(transformedAchievements);
     } catch (err) {
