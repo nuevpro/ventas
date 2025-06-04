@@ -45,6 +45,62 @@ export type Database = {
         }
         Relationships: []
       }
+      behaviors: {
+        Row: {
+          client_personality: string | null
+          common_objections: string[] | null
+          created_at: string | null
+          emotional_tone: string | null
+          id: string
+          is_active: boolean | null
+          knowledge_base: string | null
+          name: string
+          response_style: string | null
+          scenario_id: string | null
+          technical_level: string | null
+          updated_at: string | null
+          voice: string | null
+        }
+        Insert: {
+          client_personality?: string | null
+          common_objections?: string[] | null
+          created_at?: string | null
+          emotional_tone?: string | null
+          id?: string
+          is_active?: boolean | null
+          knowledge_base?: string | null
+          name: string
+          response_style?: string | null
+          scenario_id?: string | null
+          technical_level?: string | null
+          updated_at?: string | null
+          voice?: string | null
+        }
+        Update: {
+          client_personality?: string | null
+          common_objections?: string[] | null
+          created_at?: string | null
+          emotional_tone?: string | null
+          id?: string
+          is_active?: boolean | null
+          knowledge_base?: string | null
+          name?: string
+          response_style?: string | null
+          scenario_id?: string | null
+          technical_level?: string | null
+          updated_at?: string | null
+          voice?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "behaviors_scenario_id_fkey"
+            columns: ["scenario_id"]
+            isOneToOne: false
+            referencedRelation: "scenarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       campaigns: {
         Row: {
           admin_id: string | null
@@ -754,6 +810,20 @@ export type Database = {
         Args: { p_user_id: string }
         Returns: undefined
       }
+      create_behavior: {
+        Args: {
+          p_name: string
+          p_client_personality: string
+          p_scenario_id?: string
+          p_emotional_tone?: string
+          p_technical_level?: string
+          p_common_objections?: string[]
+          p_knowledge_base?: string
+          p_response_style?: string
+          p_voice?: string
+        }
+        Returns: string
+      }
       create_custom_challenge: {
         Args: {
           p_title: string
@@ -868,6 +938,21 @@ export type Database = {
       sparsevec_typmod_in: {
         Args: { "": unknown[] }
         Returns: number
+      }
+      update_behavior: {
+        Args: {
+          p_behavior_id: string
+          p_name: string
+          p_client_personality: string
+          p_scenario_id?: string
+          p_emotional_tone?: string
+          p_technical_level?: string
+          p_common_objections?: string[]
+          p_knowledge_base?: string
+          p_response_style?: string
+          p_voice?: string
+        }
+        Returns: boolean
       }
       update_scenario: {
         Args: {

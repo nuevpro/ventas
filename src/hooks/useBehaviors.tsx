@@ -1,7 +1,6 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 
 // Define the Behavior type manually since it's not in the generated types yet
@@ -22,20 +21,7 @@ type Behavior = {
   updated_at?: string;
 };
 
-type BehaviorInsert = {
-  name: string;
-  scenario_id?: string;
-  client_personality: string;
-  emotional_tone?: string;
-  technical_level?: string;
-  common_objections?: string[];
-  knowledge_base?: string;
-  response_style?: string;
-  voice?: string;
-};
-
 export const useBehaviors = () => {
-  const { user } = useAuth();
   const { toast } = useToast();
   const [behaviors, setBehaviors] = useState<Behavior[]>([]);
   const [loading, setLoading] = useState(true);
@@ -50,8 +36,7 @@ export const useBehaviors = () => {
       setLoading(true);
       setError(null);
 
-      // Use any to bypass TypeScript errors until types are updated
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from('behaviors')
         .select('*')
         .eq('is_active', true)
@@ -83,11 +68,10 @@ export const useBehaviors = () => {
     voice?: string;
   }) => {
     try {
-      // Use any to bypass TypeScript errors until types are updated
-      const { data, error } = await (supabase as any).rpc('create_behavior', {
+      const { data, error } = await supabase.rpc('create_behavior', {
         p_name: behaviorData.name,
-        p_scenario_id: behaviorData.scenario_id || null,
         p_client_personality: behaviorData.client_personality,
+        p_scenario_id: behaviorData.scenario_id || null,
         p_emotional_tone: behaviorData.emotional_tone || 'neutral',
         p_technical_level: behaviorData.technical_level || 'intermediate',
         p_common_objections: behaviorData.common_objections || [],
@@ -131,12 +115,11 @@ export const useBehaviors = () => {
     voice?: string;
   }) => {
     try {
-      // Use any to bypass TypeScript errors until types are updated
-      const { data, error } = await (supabase as any).rpc('update_behavior', {
+      const { data, error } = await supabase.rpc('update_behavior', {
         p_behavior_id: behaviorId,
         p_name: behaviorData.name,
-        p_scenario_id: behaviorData.scenario_id || null,
         p_client_personality: behaviorData.client_personality,
+        p_scenario_id: behaviorData.scenario_id || null,
         p_emotional_tone: behaviorData.emotional_tone || 'neutral',
         p_technical_level: behaviorData.technical_level || 'intermediate',
         p_common_objections: behaviorData.common_objections || [],
@@ -170,8 +153,7 @@ export const useBehaviors = () => {
 
   const deleteBehavior = async (behaviorId: string) => {
     try {
-      // Use any to bypass TypeScript errors until types are updated
-      const { error } = await (supabase as any)
+      const { error } = await supabase
         .from('behaviors')
         .delete()
         .eq('id', behaviorId);
@@ -192,7 +174,7 @@ export const useBehaviors = () => {
       toast({
         title: "Error",
         description: "No se pudo eliminar el comportamiento",
-        variant: "destructive",
+        variant: "destructiva",
       });
       throw err;
     }

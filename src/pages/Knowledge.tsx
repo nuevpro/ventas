@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { FileText, Settings, Brain, Volume2 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import KnowledgeManager from '@/components/KnowledgeManager';
+import KnowledgeManagerEnhanced from '@/components/KnowledgeManagerEnhanced';
 import ElevenLabsConfig from '@/components/ElevenLabsConfig';
 import BehaviorManager from '@/components/behaviors/BehaviorManager';
 import VoiceSelector from '@/components/voices/VoiceSelector';
@@ -45,7 +45,7 @@ const Knowledge = () => {
           </TabsList>
 
           <TabsContent value="knowledge">
-            <KnowledgeManager />
+            <KnowledgeManagerEnhanced />
           </TabsContent>
 
           <TabsContent value="behaviors">
