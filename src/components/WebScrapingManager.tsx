@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Globe, Plus, Trash2, AlertCircle, CheckCircle, ExternalLink } from 'lucide-react';
+import { Globe, Plus, Trash2, AlertCircle, CheckCircle, ExternalLink, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,6 +14,8 @@ interface ScrapedContent {
   url: string;
   title: string;
   content: string;
+  aiSummary?: string;
+  keyPoints?: string[];
   status: 'pending' | 'completed' | 'error';
   created_at: string;
 }
@@ -54,34 +56,55 @@ const WebScrapingManager = () => {
 
     try {
       setScraping(true);
-      console.log('Starting web scraping for:', url);
+      console.log('Starting real web scraping for:', url);
 
-      // Simulación de scraping - en un entorno real necesitarías un edge function
-      const mockScrapedData = {
-        title: `Contenido de ${new URL(url).hostname}`,
-        content: `Este es contenido extraído de la página web ${url}. En un entorno de producción, aquí aparecería el contenido real extraído de la página web utilizando técnicas de web scraping.`,
-        url: url,
-        status: 'completed' as const
-      };
+      // Usar la nueva edge function para extracción real
+      const { data, error } = await supabase.functions.invoke('extract-web-content', {
+        body: { url }
+      });
+
+      if (error) {
+        console.error('Error in web extraction:', error);
+        throw new Error(error.message || 'Error al extraer contenido web');
+      }
+
+      console.log('Web content extracted successfully:', data);
 
       // Agregar a la base de conocimientos
-      const { data, error } = await supabase
+      const { data: kbData, error: kbError } = await supabase
         .from('knowledge_base')
         .insert({
-          title: mockScrapedData.title,
-          content: mockScrapedData.content,
+          title: data.title,
+          content: data.content,
           document_type: 'web_scraping',
-          tags: ['web', 'scraping', new URL(url).hostname]
+          tags: ['web', 'scraping', new URL(url).hostname],
+          ai_summary: data.aiSummary,
+          key_points: data.keyPoints,
+          source_url: data.url,
+          extraction_status: 'completed',
+          processing_metadata: {
+            salesInfo: data.salesInfo,
+            objections: data.objections,
+            extractedAt: data.extractedAt
+          }
         })
         .select()
         .single();
 
-      if (error) throw error;
+      if (kbError) {
+        console.error('Error saving to knowledge base:', kbError);
+        throw new Error('Error al guardar en la base de conocimientos');
+      }
 
       // Agregar a la lista local
       const newContent: ScrapedContent = {
-        id: data.id,
-        ...mockScrapedData,
+        id: kbData.id,
+        url: data.url,
+        title: data.title,
+        content: data.content,
+        aiSummary: data.aiSummary,
+        keyPoints: data.keyPoints,
+        status: 'completed',
         created_at: new Date().toISOString()
       };
 
@@ -158,7 +181,7 @@ const WebScrapingManager = () => {
               >
                 {scraping ? (
                   <>
-                    <AlertCircle className="h-4 w-4 mr-2 animate-spin" />
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                     Extrayendo...
                   </>
                 ) : (
@@ -171,12 +194,13 @@ const WebScrapingManager = () => {
             </div>
           </div>
           
-          <div className="text-sm text-gray-600">
-            <p className="mb-2">Información sobre web scraping:</p>
+          <div className="text-sm text-gray-600 bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg">
+            <p className="mb-2 font-medium">✅ Extracción Real de Contenido Web:</p>
             <ul className="list-disc list-inside space-y-1">
-              <li>El contenido extraído se agregará automáticamente a la base de conocimientos</li>
-              <li>Asegúrate de tener permisos para extraer contenido del sitio web</li>
-              <li>El proceso puede tomar unos segundos dependiendo del tamaño de la página</li>
+              <li>Procesamiento inteligente con IA para extraer información relevante</li>
+              <li>Análisis automático de productos, servicios y precios</li>
+              <li>Generación de resúmenes y puntos clave</li>
+              <li>Integración directa con la base de conocimientos</li>
             </ul>
           </div>
         </div>
@@ -200,11 +224,13 @@ const WebScrapingManager = () => {
                       <div className="flex items-center space-x-2 mb-2">
                         {item.status === 'completed' ? (
                           <CheckCircle className="h-4 w-4 text-green-600" />
+                        ) : item.status === 'error' ? (
+                          <AlertCircle className="h-4 w-4 text-red-600" />
                         ) : (
-                          <AlertCircle className="h-4 w-4 text-yellow-600" />
+                          <Loader2 className="h-4 w-4 text-blue-600 animate-spin" />
                         )}
                         <h4 className="font-medium">{item.title}</h4>
-                        <Badge variant="outline">Web</Badge>
+                        <Badge variant="outline">Web IA</Badge>
                       </div>
                       
                       <div className="flex items-center space-x-2 mb-2">
@@ -218,6 +244,26 @@ const WebScrapingManager = () => {
                           {item.url}
                         </a>
                       </div>
+                      
+                      {item.aiSummary && (
+                        <div className="mb-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                          <p className="text-sm font-medium mb-1">Resumen IA:</p>
+                          <p className="text-sm text-gray-700 dark:text-gray-300">{item.aiSummary}</p>
+                        </div>
+                      )}
+
+                      {item.keyPoints && item.keyPoints.length > 0 && (
+                        <div className="mb-2">
+                          <p className="text-sm font-medium mb-1">Puntos clave:</p>
+                          <div className="flex flex-wrap gap-1">
+                            {item.keyPoints.slice(0, 3).map((point, index) => (
+                              <Badge key={index} variant="secondary" className="text-xs">
+                                {point}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                       
                       <p className="text-sm text-gray-600 line-clamp-2">
                         {item.content.substring(0, 150)}...

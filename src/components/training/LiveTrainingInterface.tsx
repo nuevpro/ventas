@@ -61,6 +61,7 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
   const recognitionRef = useRef<any>(null);
   const pauseStartRef = useRef<Date | null>(null);
   const totalPauseTimeRef = useRef<number>(0);
+  const audioContextRef = useRef<AudioContext | null>(null);
 
   // Seleccionar voz aleatoria al iniciar
   useEffect(() => {
@@ -166,29 +167,40 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
     }
   };
 
+  const initializeAudioContext = () => {
+    if (!audioContextRef.current) {
+      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+    if (audioContextRef.current.state === 'suspended') {
+      audioContextRef.current.resume();
+    }
+  };
+
   const sendInitialGreeting = async () => {
     setIsSpeaking(true);
     
     try {
-      const { data, error } = await supabase.functions.invoke('ai-conversation', {
+      console.log('Sending initial greeting with enhanced AI conversation...');
+      
+      const { data, error } = await supabase.functions.invoke('enhanced-ai-conversation', {
         body: {
-          message: "INICIO_SESION",
-          scenario: config.scenario,
-          scenarioTitle: config.scenarioTitle,
-          scenarioDescription: config.scenarioDescription,
-          promptInstructions: config.promptInstructions,
-          expectedOutcomes: config.expectedOutcomes,
-          clientEmotion: config.clientEmotion,
-          interactionMode: config.interactionMode,
-          voicePersonality: selectedVoice?.personality,
-          emotionalContext: selectedVoice?.emotionalContext,
-          conversationStyle: selectedVoice?.conversationStyle,
-          isInitial: true
+          messages: [
+            {
+              role: 'user',
+              content: 'INICIO_SESION'
+            }
+          ],
+          scenario: {
+            title: config.scenarioTitle,
+            description: config.scenarioDescription,
+            prompt_instructions: config.promptInstructions
+          },
+          knowledgeBase: []
         },
       });
 
       if (error) {
-        console.error('Error invoking AI conversation:', error);
+        console.error('Error invoking enhanced AI conversation:', error);
         throw error;
       }
 
@@ -205,15 +217,21 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
         await sessionManager.saveMessage(sessionId, data.response, 'ai', sessionTime);
       }
 
-      if (audioEnabled && config.interactionMode === 'call' && selectedVoice) {
+      // CRÍTICO: Asegurar que el audio se reproduzca
+      if (audioEnabled && selectedVoice) {
+        console.log('Generating audio for initial greeting...');
         await generateAndPlayAudio(data.response, selectedVoice.voiceId);
       } else {
         setIsSpeaking(false);
       }
 
       if (config.interactionMode === 'call' && recognitionRef.current) {
-        recognitionRef.current.start();
-        setIsListening(true);
+        setTimeout(() => {
+          if (recognitionRef.current && !isSpeaking) {
+            recognitionRef.current.start();
+            setIsListening(true);
+          }
+        }, 500);
       }
 
     } catch (error) {
@@ -229,6 +247,11 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
 
   const generateAndPlayAudio = async (text: string, voiceId: string) => {
     try {
+      console.log('Generating audio for text:', text.substring(0, 50) + '...');
+      console.log('Using voice:', voiceId);
+      
+      initializeAudioContext();
+      
       const { data, error } = await supabase.functions.invoke('text-to-speech', {
         body: { 
           text, 
@@ -237,30 +260,93 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
         },
       });
 
-      if (!error && data.audioContent) {
-        const audioUrl = `data:audio/mpeg;base64,${data.audioContent}`;
-        const audio = new Audio(audioUrl);
-        
-        audio.onplay = () => setIsSpeaking(true);
-        audio.onended = () => setIsSpeaking(false);
-        audio.onerror = () => {
-          console.error('Error playing audio');
-          setIsSpeaking(false);
-        };
-        
-        await audio.play();
-      } else {
-        console.error('Error generating audio:', error);
-        setIsSpeaking(false);
+      if (error) {
+        console.error('Error in TTS function:', error);
+        throw error;
       }
+
+      if (!data || !data.audioContent) {
+        console.error('No audio content received from TTS');
+        throw new Error('No audio content received');
+      }
+
+      console.log('Audio content received, creating audio element...');
+      
+      const audioUrl = `data:audio/mpeg;base64,${data.audioContent}`;
+      const audio = new Audio(audioUrl);
+      
+      // Configurar eventos de audio con más logging
+      audio.onloadstart = () => console.log('Audio load started');
+      audio.oncanplay = () => console.log('Audio can play');
+      audio.onplay = () => {
+        console.log('Audio started playing');
+        setIsSpeaking(true);
+      };
+      audio.onended = () => {
+        console.log('Audio finished playing');
+        setIsSpeaking(false);
+        
+        // Reactivar reconocimiento de voz si está en modo llamada
+        if (config.interactionMode === 'call' && recognitionRef.current && !isPaused) {
+          setTimeout(() => {
+            try {
+              recognitionRef.current.start();
+              setIsListening(true);
+              console.log('Speech recognition restarted after audio ended');
+            } catch (error) {
+              console.log('Speech recognition already running or error:', error);
+            }
+          }, 500);
+        }
+      };
+      audio.onerror = (e) => {
+        console.error('Error playing audio:', e);
+        setIsSpeaking(false);
+        toast({
+          title: "Error de audio",
+          description: "No se pudo reproducir el audio. Revisa la configuración.",
+          variant: "destructive",
+        });
+      };
+      
+      // Asegurar que el audio se reproduzca
+      try {
+        console.log('Attempting to play audio...');
+        await audio.play();
+        console.log('Audio play() called successfully');
+      } catch (playError) {
+        console.error('Error calling audio.play():', playError);
+        setIsSpeaking(false);
+        
+        // Mostrar mensaje para que el usuario interactúe si es necesario
+        toast({
+          title: "Interacción requerida",
+          description: "Haz clic en cualquier parte para habilitar el audio",
+          variant: "destructive",
+        });
+      }
+      
     } catch (error) {
       console.error('Error generating audio:', error);
       setIsSpeaking(false);
+      toast({
+        title: "Error",
+        description: `Error generando audio: ${error.message || 'Error desconocido'}`,
+        variant: "destructive",
+      });
     }
   };
 
   const handleUserMessage = async (content: string) => {
     if (!content.trim()) return;
+
+    console.log('Processing user message:', content);
+
+    // Detener reconocimiento de voz mientras se procesa
+    if (recognitionRef.current && isListening) {
+      recognitionRef.current.stop();
+      setIsListening(false);
+    }
 
     const userMessage = {
       id: Date.now().toString(),
@@ -278,26 +364,37 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
     setIsSpeaking(true);
 
     try {
-      const { data, error } = await supabase.functions.invoke('ai-conversation', {
+      console.log('Sending message to enhanced AI conversation...');
+      
+      const conversationHistory = messages.slice(-5).map(m => ({
+        role: m.sender === 'user' ? 'user' : 'assistant',
+        content: m.content
+      }));
+
+      const { data, error } = await supabase.functions.invoke('enhanced-ai-conversation', {
         body: {
-          message: content,
-          scenario: config.scenario,
-          scenarioTitle: config.scenarioTitle,
-          scenarioDescription: config.scenarioDescription,
-          promptInstructions: config.promptInstructions,
-          expectedOutcomes: config.expectedOutcomes,
-          clientEmotion: config.clientEmotion,
-          voicePersonality: selectedVoice?.personality,
-          emotionalContext: selectedVoice?.emotionalContext,
-          conversationStyle: selectedVoice?.conversationStyle,
-          conversationHistory: messages.slice(-5),
+          messages: [
+            ...conversationHistory,
+            {
+              role: 'user',
+              content: content
+            }
+          ],
+          scenario: {
+            title: config.scenarioTitle,
+            description: config.scenarioDescription,
+            prompt_instructions: config.promptInstructions
+          },
+          knowledgeBase: []
         },
       });
 
       if (error) {
-        console.error('Error in AI conversation:', error);
+        console.error('Error in enhanced AI conversation:', error);
         throw error;
       }
+
+      console.log('AI response received:', data.response);
 
       const aiMessage = {
         id: (Date.now() + 1).toString(),
@@ -314,11 +411,15 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
 
       await updateRealTimeMetrics(content, data.response);
 
-      if (audioEnabled && config.interactionMode === 'call' && selectedVoice) {
+      // CRÍTICO: Siempre generar audio para las respuestas
+      if (audioEnabled && selectedVoice) {
+        console.log('Generating audio for AI response...');
         await generateAndPlayAudio(data.response, selectedVoice.voiceId);
       } else {
         setIsSpeaking(false);
+        console.log('Audio disabled or no voice selected');
       }
+      
     } catch (error) {
       console.error('Error sending message:', error);
       setIsSpeaking(false);
@@ -521,6 +622,36 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
     }
   };
 
+  const reactivateAgent = async () => {
+    try {
+      console.log('Reactivating agent...');
+      setIsSpeaking(false);
+      setIsListening(false);
+      
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+      
+      // Reiniciar audio context
+      initializeAudioContext();
+      
+      // Enviar mensaje de reactivación
+      await handleUserMessage("Continúa la conversación");
+      
+      toast({
+        title: "Agente reactivado",
+        description: "La conversación ha sido reiniciada",
+      });
+    } catch (error) {
+      console.error('Error reactivating agent:', error);
+      toast({
+        title: "Error",
+        description: "No se pudo reactivar el agente",
+        variant: "destructive",
+      });
+    }
+  };
+
   if (!isActive) {
     return (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[600px]">
@@ -634,6 +765,16 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
               disabled={isPaused}
             >
               {audioEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={reactivateAgent}
+              disabled={isPaused}
+              className="bg-blue-50 text-blue-600"
+            >
+              🔄 Reactivar
             </Button>
             
             <Button variant="destructive" size="sm" onClick={endSession}>

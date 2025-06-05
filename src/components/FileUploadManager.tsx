@@ -1,12 +1,13 @@
 
 import React, { useEffect, useCallback } from 'react';
-import { Upload, File, Trash2, AlertCircle, CheckCircle, Clock } from 'lucide-react';
+import { Upload, File, Trash2, AlertCircle, CheckCircle, Clock, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { useFileUpload } from '@/hooks/useFileUpload';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 
 const FileUploadManager = () => {
   const { files, loading, uploading, loadFiles, uploadFile, deleteFile } = useFileUpload();
@@ -51,7 +52,96 @@ const FileUploadManager = () => {
       }
 
       try {
-        await uploadFile(file);
+        console.log('Processing file with AI extraction:', file.name);
+        
+        // Convertir archivo a base64 para procesamiento
+        const base64Content = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const result = reader.result as string;
+            const base64 = result.split(',')[1]; // Remover data:xxx;base64,
+            resolve(base64);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+
+        // Primero cargar el archivo básico
+        const uploadedFile = await uploadFile(file);
+        
+        if (uploadedFile) {
+          // Después procesarlo con IA para extracción real
+          console.log('Extracting content with AI for file:', file.name);
+          
+          try {
+            const { data: extractionData, error: extractionError } = await supabase.functions.invoke('extract-document-content', {
+              body: {
+                fileContent: base64Content,
+                fileName: file.name,
+                fileType: file.type
+              }
+            });
+
+            if (extractionError) {
+              console.error('Error in document extraction:', extractionError);
+              throw new Error(extractionError.message || 'Error en extracción de documento');
+            }
+
+            console.log('Document extraction completed:', extractionData);
+
+            // Actualizar el archivo con el contenido extraído
+            const { error: updateError } = await supabase
+              .from('uploaded_files')
+              .update({
+                content_extracted: extractionData.extractedContent,
+                processing_status: extractionData.status || 'completed',
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', uploadedFile.id);
+
+            if (updateError) {
+              console.error('Error updating file:', updateError);
+            }
+
+            // Crear entrada mejorada en knowledge_base
+            const { error: kbError } = await supabase
+              .from('knowledge_base')
+              .insert({
+                title: extractionData.fileName,
+                content: extractionData.extractedContent,
+                document_type: 'uploaded_file',
+                tags: [extractionData.documentType, 'archivo'],
+                ai_summary: extractionData.aiSummary,
+                key_points: extractionData.keyPoints,
+                file_id: uploadedFile.id,
+                extraction_status: 'completed',
+                processing_metadata: {
+                  salesRelevant: extractionData.salesRelevant,
+                  importantData: extractionData.importantData,
+                  wordCount: extractionData.wordCount,
+                  extractedAt: extractionData.extractedAt
+                }
+              });
+
+            if (kbError) {
+              console.error('Error saving to knowledge base:', kbError);
+            } else {
+              toast({
+                title: "¡Extracción completada!",
+                description: `${file.name} procesado con IA y agregado a la base de conocimientos`,
+              });
+            }
+
+          } catch (extractionError) {
+            console.error('Error in AI extraction:', extractionError);
+            toast({
+              title: "Extracción parcial",
+              description: `${file.name} cargado pero requiere procesamiento manual adicional`,
+              variant: "destructive",
+            });
+          }
+        }
+
       } catch (error) {
         console.error('Error uploading file:', file.name, error);
       }
@@ -59,7 +149,12 @@ const FileUploadManager = () => {
 
     // Reset input
     event.target.value = '';
-  }, [uploadFile, toast]);
+    
+    // Recargar lista de archivos
+    setTimeout(() => {
+      loadFiles();
+    }, 1000);
+  }, [uploadFile, toast, loadFiles]);
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -67,6 +162,8 @@ const FileUploadManager = () => {
         return <CheckCircle className="h-4 w-4 text-green-600" />;
       case 'pending':
         return <Clock className="h-4 w-4 text-yellow-600" />;
+      case 'processing':
+        return <Loader2 className="h-4 w-4 text-blue-600 animate-spin" />;
       case 'error':
         return <AlertCircle className="h-4 w-4 text-red-600" />;
       default:
@@ -115,8 +212,18 @@ const FileUploadManager = () => {
             className="mb-4"
           />
           {uploading && (
-            <p className="text-sm text-blue-600">Cargando archivo(s)...</p>
+            <p className="text-sm text-blue-600">Cargando y procesando archivo(s) con IA...</p>
           )}
+          
+          <div className="text-sm text-gray-600 bg-green-50 dark:bg-green-900/20 p-3 rounded-lg mt-4">
+            <p className="mb-2 font-medium">✅ Extracción Avanzada con IA:</p>
+            <ul className="list-disc list-inside space-y-1">
+              <li>Procesamiento OCR para PDFs con texto en imágenes</li>
+              <li>Análisis inteligente del contenido con GPT-4</li>
+              <li>Generación automática de resúmenes y puntos clave</li>
+              <li>Identificación de información comercial relevante</li>
+            </ul>
+          </div>
         </div>
 
         {/* Files List */}
@@ -146,10 +253,12 @@ const FileUploadManager = () => {
                         </span>
                         <Badge variant={
                           file.processing_status === 'completed' ? 'default' :
-                          file.processing_status === 'pending' ? 'secondary' : 'destructive'
+                          file.processing_status === 'pending' ? 'secondary' : 
+                          file.processing_status === 'processing' ? 'outline' : 'destructive'
                         }>
-                          {file.processing_status === 'completed' ? 'Procesado' :
-                           file.processing_status === 'pending' ? 'Pendiente' : 'Error'}
+                          {file.processing_status === 'completed' ? '✅ Procesado con IA' :
+                           file.processing_status === 'pending' ? 'Pendiente' : 
+                           file.processing_status === 'processing' ? 'Procesando...' : 'Error'}
                         </Badge>
                       </div>
                     </div>
@@ -165,9 +274,9 @@ const FileUploadManager = () => {
                 </div>
                 
                 {file.content_extracted && file.processing_status === 'completed' && (
-                  <div className="mt-3 p-3 bg-gray-50 rounded text-sm">
-                    <p className="font-medium mb-1">Contenido extraído:</p>
-                    <p className="text-gray-700 line-clamp-3">
+                  <div className="mt-3 p-3 bg-gray-50 dark:bg-gray-800 rounded text-sm">
+                    <p className="font-medium mb-1">✅ Contenido extraído con IA:</p>
+                    <p className="text-gray-700 dark:text-gray-300 line-clamp-3">
                       {file.content_extracted.substring(0, 200)}...
                     </p>
                   </div>
