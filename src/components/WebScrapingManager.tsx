@@ -3,7 +3,6 @@ import { Globe, Plus, Trash2, AlertCircle, CheckCircle, ExternalLink, Loader2 } 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -201,7 +200,7 @@ const WebScrapingManager = () => {
         {/* URL Input */}
         <div className="space-y-4 p-4 border rounded-lg">
           <div className="space-y-2">
-            <Label htmlFor="url">URL del sitio web</Label>
+            <label htmlFor="url">URL del sitio web</label>
             <div className="flex space-x-2">
               <Input
                 id="url"

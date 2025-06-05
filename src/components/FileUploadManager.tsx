@@ -72,12 +72,12 @@ const FileUploadManager = () => {
           // Después procesarlo con IA para extracción real
           console.log('Extracting content with AI for file:', file.name);
           
+          toast({
+            title: "Procesando documento",
+            description: `Extrayendo contenido de ${file.name} con IA...`,
+          });
+          
           try {
-            toast({
-              title: "Procesando documento",
-              description: `Extrayendo contenido de ${file.name} con IA...`,
-            });
-            
             const { data: extractionData, error: extractionError } = await supabase.functions.invoke('extract-document-content', {
               body: {
                 fileContent: base64Content,
