@@ -332,34 +332,55 @@ export type Database = {
       }
       knowledge_base: {
         Row: {
+          ai_summary: string | null
           campaign_id: string | null
           content: string | null
           created_at: string | null
           document_type: string | null
           embeddings: string | null
+          extraction_status: string | null
+          file_id: string | null
           id: string
+          key_points: string[] | null
+          manual_notes: string | null
+          processing_metadata: Json | null
+          source_url: string | null
           tags: string[] | null
           title: string
           updated_at: string | null
         }
         Insert: {
+          ai_summary?: string | null
           campaign_id?: string | null
           content?: string | null
           created_at?: string | null
           document_type?: string | null
           embeddings?: string | null
+          extraction_status?: string | null
+          file_id?: string | null
           id?: string
+          key_points?: string[] | null
+          manual_notes?: string | null
+          processing_metadata?: Json | null
+          source_url?: string | null
           tags?: string[] | null
           title: string
           updated_at?: string | null
         }
         Update: {
+          ai_summary?: string | null
           campaign_id?: string | null
           content?: string | null
           created_at?: string | null
           document_type?: string | null
           embeddings?: string | null
+          extraction_status?: string | null
+          file_id?: string | null
           id?: string
+          key_points?: string[] | null
+          manual_notes?: string | null
+          processing_metadata?: Json | null
+          source_url?: string | null
           tags?: string[] | null
           title?: string
           updated_at?: string | null
@@ -370,6 +391,13 @@ export type Database = {
             columns: ["campaign_id"]
             isOneToOne: false
             referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "knowledge_base_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: false
+            referencedRelation: "uploaded_files"
             referencedColumns: ["id"]
           },
         ]
@@ -553,6 +581,38 @@ export type Database = {
           },
         ]
       }
+      session_transcripts: {
+        Row: {
+          created_at: string | null
+          full_transcript: Json
+          id: string
+          session_id: string | null
+          word_count: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          full_transcript?: Json
+          id?: string
+          session_id?: string | null
+          word_count?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          full_transcript?: Json
+          id?: string
+          session_id?: string | null
+          word_count?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "session_transcripts_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "training_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       team_members: {
         Row: {
           id: string
@@ -620,37 +680,64 @@ export type Database = {
       }
       training_sessions: {
         Row: {
+          ai_words_count: number | null
+          client_emotion: string | null
           completed_at: string | null
           conversation_log: Json | null
           created_at: string | null
           duration_minutes: number | null
+          duration_seconds: number | null
           feedback: Json | null
           id: string
+          interaction_mode: string | null
           scenario_id: string | null
+          scenario_title: string | null
           score: number | null
+          session_status: string | null
+          total_messages: number | null
           user_id: string | null
+          user_words_count: number | null
+          voice_used: string | null
         }
         Insert: {
+          ai_words_count?: number | null
+          client_emotion?: string | null
           completed_at?: string | null
           conversation_log?: Json | null
           created_at?: string | null
           duration_minutes?: number | null
+          duration_seconds?: number | null
           feedback?: Json | null
           id?: string
+          interaction_mode?: string | null
           scenario_id?: string | null
+          scenario_title?: string | null
           score?: number | null
+          session_status?: string | null
+          total_messages?: number | null
           user_id?: string | null
+          user_words_count?: number | null
+          voice_used?: string | null
         }
         Update: {
+          ai_words_count?: number | null
+          client_emotion?: string | null
           completed_at?: string | null
           conversation_log?: Json | null
           created_at?: string | null
           duration_minutes?: number | null
+          duration_seconds?: number | null
           feedback?: Json | null
           id?: string
+          interaction_mode?: string | null
           scenario_id?: string | null
+          scenario_title?: string | null
           score?: number | null
+          session_status?: string | null
+          total_messages?: number | null
           user_id?: string | null
+          user_words_count?: number | null
+          voice_used?: string | null
         }
         Relationships: [
           {
@@ -904,6 +991,16 @@ export type Database = {
           is_active: boolean
           created_at: string
           updated_at: string
+        }[]
+      }
+      get_user_session_stats: {
+        Args: { p_user_id: string }
+        Returns: {
+          total_sessions: number
+          avg_score: number
+          best_score: number
+          total_duration_minutes: number
+          sessions_this_month: number
         }[]
       }
       halfvec_avg: {
