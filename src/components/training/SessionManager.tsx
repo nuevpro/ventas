@@ -10,7 +10,16 @@ type DbTrainingSessionInsert = Database['public']['Tables']['training_sessions']
 type DbConversationMessage = Database['public']['Tables']['conversation_messages']['Row'];
 type DbSessionEvaluation = Database['public']['Tables']['session_evaluations']['Row'];
 
-interface SessionData extends DbTrainingSession {
+interface SessionData {
+  id: string;
+  user_id: string | null;
+  scenario_id: string | null;
+  created_at: string | null;
+  completed_at: string | null;
+  duration_minutes: number | null;
+  score: number | null;
+  conversation_log: any;
+  feedback: any;
   scenario_title?: string;
   client_emotion?: string;
   interaction_mode?: string;
@@ -259,7 +268,15 @@ export class SessionManager {
       console.log('SessionManager: Sessions fetched:', data?.length || 0);
 
       return (data || []).map(session => ({
-        ...session,
+        id: session.id,
+        user_id: session.user_id,
+        scenario_id: session.scenario_id,
+        created_at: session.created_at,
+        completed_at: session.completed_at,
+        duration_minutes: session.duration_minutes,
+        score: session.score,
+        conversation_log: session.conversation_log,
+        feedback: session.feedback,
         scenario_title: (session.conversation_log as any)?.scenario_title,
         client_emotion: (session.conversation_log as any)?.client_emotion,
         interaction_mode: (session.conversation_log as any)?.interaction_mode,
