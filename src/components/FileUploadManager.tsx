@@ -73,6 +73,11 @@ const FileUploadManager = () => {
           console.log('Extracting content with AI for file:', file.name);
           
           try {
+            toast({
+              title: "Procesando documento",
+              description: `Extrayendo contenido de ${file.name} con IA...`,
+            });
+            
             const { data: extractionData, error: extractionError } = await supabase.functions.invoke('extract-document-content', {
               body: {
                 fileContent: base64Content,
@@ -133,9 +138,19 @@ const FileUploadManager = () => {
 
           } catch (extractionError) {
             console.error('Error in AI extraction:', extractionError);
+            
+            // Actualizar estado a error
+            await supabase
+              .from('uploaded_files')
+              .update({
+                processing_status: 'error',
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', uploadedFile.id);
+              
             toast({
-              title: "Extracción parcial",
-              description: `${file.name} cargado pero requiere procesamiento manual adicional`,
+              title: "Error en extracción",
+              description: extractionError instanceof Error ? extractionError.message : "Error al procesar el documento",
               variant: "destructive",
             });
           }
@@ -143,6 +158,11 @@ const FileUploadManager = () => {
 
       } catch (error) {
         console.error('Error uploading file:', file.name, error);
+        toast({
+          title: "Error",
+          description: `Error al cargar ${file.name}: ${error instanceof Error ? error.message : 'Error desconocido'}`,
+          variant: "destructive",
+        });
       }
     }
 
@@ -184,6 +204,73 @@ const FileUploadManager = () => {
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  const retryProcessing = async (fileId: string, fileName: string, fileType: string) => {
+    try {
+      toast({
+        title: "Reintentando procesamiento",
+        description: `Procesando ${fileName} nuevamente...`,
+      });
+      
+      // Actualizar estado a procesando
+      await supabase
+        .from('uploaded_files')
+        .update({
+          processing_status: 'processing',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', fileId);
+      
+      // Obtener el contenido del archivo
+      const { data: fileData } = await supabase
+        .from('uploaded_files')
+        .select('*')
+        .eq('id', fileId)
+        .single();
+      
+      if (!fileData) {
+        throw new Error('Archivo no encontrado');
+      }
+      
+      // Reintentar extracción
+      const { data: extractionData, error: extractionError } = await supabase.functions.invoke('extract-document-content', {
+        body: {
+          fileContent: '', // No tenemos el contenido original, pero la función puede intentar extraer de nuevo
+          fileName: fileName,
+          fileType: fileType,
+          fileId: fileId
+        }
+      });
+      
+      if (extractionError) {
+        throw new Error(extractionError.message);
+      }
+      
+      // Actualizar con el resultado
+      await supabase
+        .from('uploaded_files')
+        .update({
+          content_extracted: extractionData.extractedContent,
+          processing_status: 'completed',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', fileId);
+      
+      toast({
+        title: "Procesamiento completado",
+        description: `${fileName} procesado correctamente`,
+      });
+      
+      loadFiles();
+    } catch (error) {
+      console.error('Error retrying processing:', error);
+      toast({
+        title: "Error",
+        description: `No se pudo reprocesar el archivo: ${error instanceof Error ? error.message : 'Error desconocido'}`,
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -262,14 +349,27 @@ const FileUploadManager = () => {
                       </div>
                     </div>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => deleteFile(file.id)}
-                    className="text-red-600 hover:text-red-700"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <div className="flex space-x-2">
+                    {file.processing_status === 'error' && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => retryProcessing(file.id, file.filename, file.file_type)}
+                        className="text-blue-600 hover:text-blue-700"
+                      >
+                        <Loader2 className="h-4 w-4 mr-1" />
+                        Reintentar
+                      </Button>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => deleteFile(file.id)}
+                      className="text-red-600 hover:text-red-700"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
                 
                 {file.content_extracted && file.processing_status === 'completed' && (
@@ -277,6 +377,15 @@ const FileUploadManager = () => {
                     <p className="font-medium mb-1">✅ Contenido extraído con IA:</p>
                     <p className="text-gray-700 dark:text-gray-300 line-clamp-3">
                       {file.content_extracted.substring(0, 200)}...
+                    </p>
+                  </div>
+                )}
+                
+                {file.processing_status === 'error' && (
+                  <div className="mt-3 p-3 bg-red-50 dark:bg-red-900/20 rounded text-sm">
+                    <p className="font-medium mb-1 text-red-700 dark:text-red-400">❌ Error en el procesamiento:</p>
+                    <p className="text-red-600 dark:text-red-300">
+                      No se pudo extraer el contenido del documento. Intente con otro formato o reintentar el procesamiento.
                     </p>
                   </div>
                 )}
