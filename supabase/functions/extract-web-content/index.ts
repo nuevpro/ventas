@@ -1,6 +1,5 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import "https://deno.land/x/xhr@0.1.0/mod.ts"
 
 const corsHeaders = {
@@ -8,8 +7,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const openAIApiKey = Deno.env.get('OPENAI_API_KEY')!
 
 serve(async (req) => {
@@ -37,7 +34,12 @@ serve(async (req) => {
     // Extraer contenido web
     const response = await fetch(validUrl.toString(), {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'es-ES,es;q=0.8,en-US;q=0.5,en;q=0.3',
+        'Accept-Encoding': 'gzip, deflate',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
       }
     })
 
@@ -46,23 +48,30 @@ serve(async (req) => {
     }
 
     const html = await response.text()
+    console.log('HTML content fetched, length:', html.length)
     
     // Procesar contenido con OpenAI para extraer información relevante
     const extractionPrompt = `
 Extrae el contenido principal de esta página web y estructura la información de manera útil para entrenamiento de ventas.
 
-Incluye:
-1. Título principal
-2. Información sobre productos/servicios
-3. Precios si están disponibles
-4. Características principales
-5. Información de contacto
-6. Cualquier dato relevante para ventas
+URL: ${validUrl.toString()}
 
-HTML de la página:
-${html.substring(0, 8000)}...
+Incluye y organiza la siguiente información si está disponible:
+1. Título principal de la página
+2. Descripción de productos/servicios ofrecidos
+3. Precios, tarifas o costos mencionados
+4. Características principales de productos/servicios
+5. Información de contacto (teléfonos, emails, direcciones)
+6. Horarios de atención
+7. Promociones o ofertas especiales
+8. Información sobre la empresa
+9. Testimonios o reseñas de clientes
+10. Cualquier dato relevante para ventas
 
-Responde en español con un formato estructurado y limpio, sin etiquetas HTML.
+Contenido HTML (primeros 8000 caracteres):
+${html.substring(0, 8000)}
+
+Responde SOLO con la información extraída en español, sin etiquetas HTML, organizada de forma clara y estructurada.
 `
 
     const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -76,42 +85,42 @@ Responde en español con un formato estructurado y limpio, sin etiquetas HTML.
         messages: [
           {
             role: 'system',
-            content: 'Eres un experto en extraer y estructurar información web para entrenamientos de ventas. Extrae solo información relevante y útil.'
+            content: 'Eres un experto en extraer y estructurar información web para entrenamientos de ventas. Extrae solo información relevante, útil y verificable. Responde en español.'
           },
           {
             role: 'user',
             content: extractionPrompt
           }
         ],
-        max_tokens: 1500,
-        temperature: 0.3,
+        max_tokens: 2000,
+        temperature: 0.2,
       }),
     })
 
     if (!openAIResponse.ok) {
-      throw new Error('Failed to process content with AI')
+      console.error('OpenAI API error:', openAIResponse.status)
+      throw new Error(`OpenAI API error: ${openAIResponse.status}`)
     }
 
     const aiResult = await openAIResponse.json()
-    const extractedContent = aiResult.choices[0]?.message?.content || html.substring(0, 1000)
+    const extractedContent = aiResult.choices[0]?.message?.content || 'No se pudo extraer contenido de la página web.'
+
+    console.log('Content extracted successfully, length:', extractedContent.length)
 
     // Generar resumen con puntos clave
     const summaryPrompt = `
-Basándote en el siguiente contenido extraído de una página web, genera:
-
-1. Un resumen ejecutivo (2-3 párrafos)
-2. Lista de puntos clave (5-7 puntos principales)
-3. Información relevante para ventas
-4. Posibles objeciones y respuestas
+Basándote en el siguiente contenido extraído de una página web, genera un análisis estructurado:
 
 Contenido extraído:
 ${extractedContent}
 
-Responde en formato JSON con las siguientes propiedades:
-- summary: string
-- keyPoints: string[]
-- salesInfo: string
-- objections: string[]
+Responde en formato JSON con esta estructura exacta:
+{
+  "summary": "Resumen ejecutivo en 2-3 párrafos",
+  "keyPoints": ["punto clave 1", "punto clave 2", "punto clave 3", "punto clave 4", "punto clave 5"],
+  "salesInfo": "Información específica para equipos de ventas",
+  "objections": ["posible objeción 1", "posible objeción 2", "posible objeción 3"]
+}
 `
 
     const summaryResponse = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -125,7 +134,7 @@ Responde en formato JSON con las siguientes propiedades:
         messages: [
           {
             role: 'system',
-            content: 'Eres un analista experto que estructura información para entrenamientos de ventas. Responde siempre en JSON válido.'
+            content: 'Analista experto que estructura información para entrenamientos de ventas. Responde SIEMPRE en JSON válido.'
           },
           {
             role: 'user',
@@ -133,26 +142,30 @@ Responde en formato JSON con las siguientes propiedades:
           }
         ],
         max_tokens: 1000,
-        temperature: 0.2,
+        temperature: 0.1,
       }),
     })
 
     let analysis
     try {
-      const summaryResult = await summaryResponse.json()
-      const analysisText = summaryResult.choices[0]?.message?.content || '{}'
-      analysis = JSON.parse(analysisText)
+      if (summaryResponse.ok) {
+        const summaryResult = await summaryResponse.json()
+        const analysisText = summaryResult.choices[0]?.message?.content || '{}'
+        analysis = JSON.parse(analysisText)
+      } else {
+        throw new Error('Summary generation failed')
+      }
     } catch (error) {
       console.error('Error parsing analysis:', error)
       analysis = {
-        summary: "Contenido extraído exitosamente",
-        keyPoints: ["Información procesada", "Contenido disponible"],
-        salesInfo: extractedContent.substring(0, 200),
-        objections: []
+        summary: "Contenido extraído exitosamente de " + validUrl.hostname,
+        keyPoints: ["Información web disponible", "Contenido procesado", "Datos para análisis"],
+        salesInfo: extractedContent.substring(0, 300),
+        objections: ["Verificar información actualizada", "Consultar condiciones específicas"]
       }
     }
 
-    console.log('Content extraction completed successfully')
+    console.log('Web content extraction completed successfully')
 
     return new Response(JSON.stringify({
       url: validUrl.toString(),
@@ -162,7 +175,8 @@ Responde en formato JSON con las siguientes propiedades:
       keyPoints: analysis.keyPoints,
       salesInfo: analysis.salesInfo,
       objections: analysis.objections,
-      extractedAt: new Date().toISOString()
+      extractedAt: new Date().toISOString(),
+      status: 'completed'
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
@@ -170,7 +184,8 @@ Responde en formato JSON con las siguientes propiedades:
   } catch (error) {
     console.error('Error in extract-web-content:', error)
     return new Response(JSON.stringify({ 
-      error: error.message || 'Failed to extract web content'
+      error: error.message || 'Failed to extract web content',
+      status: 'error'
     }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

@@ -42,6 +42,7 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
   const [callStatus, setCallStatus] = useState('connecting');
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [selectedVoice, setSelectedVoice] = useState<RandomVoiceSelection | null>(null);
+  const [conversationActive, setConversationActive] = useState(false);
   const [realTimeMetrics, setRealTimeMetrics] = useState<RealTimeMetrics>({
     rapport: 75,
     clarity: 80,
@@ -62,6 +63,8 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
   const pauseStartRef = useRef<Date | null>(null);
   const totalPauseTimeRef = useRef<number>(0);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const conversationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isProcessingRef = useRef<boolean>(false);
 
   // Seleccionar voz aleatoria al iniciar
   useEffect(() => {
@@ -114,24 +117,46 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
 
         setCurrentUserText(interimTranscript);
         
-        if (finalTranscript) {
+        if (finalTranscript && !isProcessingRef.current) {
           handleUserMessage(finalTranscript.trim());
           setCurrentUserText('');
         }
       };
 
+      recognitionRef.current.onend = () => {
+        // Auto-reiniciar reconocimiento si la conversación está activa
+        if (conversationActive && !isPaused && !isSpeaking && config.interactionMode === 'call') {
+          setTimeout(() => {
+            try {
+              recognitionRef.current?.start();
+              setIsListening(true);
+            } catch (error) {
+              console.log('Speech recognition restart:', error);
+            }
+          }, 500);
+        } else {
+          setIsListening(false);
+        }
+      };
+
       recognitionRef.current.onerror = (event: any) => {
         console.error('Speech recognition error:', event.error);
-        if (event.error === 'not-allowed') {
-          toast({
-            title: "Permisos de micrófono",
-            description: "Por favor, permite el acceso al micrófono para usar esta función",
-            variant: "destructive",
-          });
+        setIsListening(false);
+        
+        // Reintentar después de un error
+        if (conversationActive && !isPaused && event.error !== 'not-allowed') {
+          setTimeout(() => {
+            try {
+              recognitionRef.current?.start();
+              setIsListening(true);
+            } catch (error) {
+              console.log('Error restarting recognition:', error);
+            }
+          }, 1000);
         }
       };
     }
-  }, []);
+  }, [conversationActive, isPaused, isSpeaking]);
 
   const initializeSession = async () => {
     const enhancedConfig = {
@@ -153,6 +178,7 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
       setCallStatus('ringing');
       setTimeout(() => {
         setCallStatus('connected');
+        setConversationActive(true);
         toast({
           title: "Llamada conectada",
           description: `Conectado con ${selectedVoice?.voiceName}`,
@@ -163,6 +189,7 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
       }, 3000);
     } else {
       setCallStatus('connected');
+      setConversationActive(true);
       sendInitialGreeting();
     }
   };
@@ -177,10 +204,12 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
   };
 
   const sendInitialGreeting = async () => {
+    if (isProcessingRef.current) return;
+    isProcessingRef.current = true;
     setIsSpeaking(true);
     
     try {
-      console.log('Sending initial greeting with enhanced AI conversation...');
+      console.log('Sending initial greeting...');
       
       const { data, error } = await supabase.functions.invoke('enhanced-ai-conversation', {
         body: {
@@ -217,29 +246,18 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
         await sessionManager.saveMessage(sessionId, data.response, 'ai', sessionTime);
       }
 
-      // CRÍTICO: Asegurar que el audio se reproduzca
-      if (audioEnabled && selectedVoice) {
-        console.log('Generating audio for initial greeting...');
+      // Generar audio SIEMPRE
+      if (selectedVoice) {
         await generateAndPlayAudio(data.response, selectedVoice.voiceId);
-      } else {
-        setIsSpeaking(false);
-      }
-
-      if (config.interactionMode === 'call' && recognitionRef.current) {
-        setTimeout(() => {
-          if (recognitionRef.current && !isSpeaking) {
-            recognitionRef.current.start();
-            setIsListening(true);
-          }
-        }, 500);
       }
 
     } catch (error) {
       console.error('Error initializing session:', error);
       setIsSpeaking(false);
+      isProcessingRef.current = false;
       toast({
         title: "Error",
-        description: "No se pudo inicializar la conversación. Inténtalo de nuevo.",
+        description: "No se pudo inicializar la conversación.",
         variant: "destructive",
       });
     }
@@ -247,8 +265,7 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
 
   const generateAndPlayAudio = async (text: string, voiceId: string) => {
     try {
-      console.log('Generating audio for text:', text.substring(0, 50) + '...');
-      console.log('Using voice:', voiceId);
+      console.log('Generating audio for:', text.substring(0, 50) + '...');
       
       initializeAudioContext();
       
@@ -266,83 +283,60 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
       }
 
       if (!data || !data.audioContent) {
-        console.error('No audio content received from TTS');
         throw new Error('No audio content received');
       }
 
-      console.log('Audio content received, creating audio element...');
-      
       const audioUrl = `data:audio/mpeg;base64,${data.audioContent}`;
       const audio = new Audio(audioUrl);
       
-      // Configurar eventos de audio con más logging
-      audio.onloadstart = () => console.log('Audio load started');
-      audio.oncanplay = () => console.log('Audio can play');
       audio.onplay = () => {
         console.log('Audio started playing');
         setIsSpeaking(true);
       };
+      
       audio.onended = () => {
         console.log('Audio finished playing');
         setIsSpeaking(false);
+        isProcessingRef.current = false;
         
-        // Reactivar reconocimiento de voz si está en modo llamada
-        if (config.interactionMode === 'call' && recognitionRef.current && !isPaused) {
+        // CRÍTICO: Reactivar reconocimiento automáticamente después del audio
+        if (conversationActive && !isPaused && config.interactionMode === 'call') {
           setTimeout(() => {
             try {
-              recognitionRef.current.start();
-              setIsListening(true);
-              console.log('Speech recognition restarted after audio ended');
+              if (recognitionRef.current) {
+                recognitionRef.current.start();
+                setIsListening(true);
+                console.log('Speech recognition restarted after audio');
+              }
             } catch (error) {
-              console.log('Speech recognition already running or error:', error);
+              console.log('Speech recognition restart error:', error);
             }
           }, 500);
         }
       };
+      
       audio.onerror = (e) => {
         console.error('Error playing audio:', e);
         setIsSpeaking(false);
-        toast({
-          title: "Error de audio",
-          description: "No se pudo reproducir el audio. Revisa la configuración.",
-          variant: "destructive",
-        });
+        isProcessingRef.current = false;
       };
       
-      // Asegurar que el audio se reproduzca
-      try {
-        console.log('Attempting to play audio...');
-        await audio.play();
-        console.log('Audio play() called successfully');
-      } catch (playError) {
-        console.error('Error calling audio.play():', playError);
-        setIsSpeaking(false);
-        
-        // Mostrar mensaje para que el usuario interactúe si es necesario
-        toast({
-          title: "Interacción requerida",
-          description: "Haz clic en cualquier parte para habilitar el audio",
-          variant: "destructive",
-        });
-      }
+      await audio.play();
       
     } catch (error) {
       console.error('Error generating audio:', error);
       setIsSpeaking(false);
-      toast({
-        title: "Error",
-        description: `Error generando audio: ${error.message || 'Error desconocido'}`,
-        variant: "destructive",
-      });
+      isProcessingRef.current = false;
     }
   };
 
   const handleUserMessage = async (content: string) => {
-    if (!content.trim()) return;
+    if (!content.trim() || isProcessingRef.current) return;
 
     console.log('Processing user message:', content);
+    isProcessingRef.current = true;
 
-    // Detener reconocimiento de voz mientras se procesa
+    // Detener reconocimiento mientras se procesa
     if (recognitionRef.current && isListening) {
       recognitionRef.current.stop();
       setIsListening(false);
@@ -361,12 +355,10 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
       await sessionManager.saveMessage(sessionId, content, 'user', sessionTime);
     }
 
-    setIsSpeaking(true);
-
     try {
-      console.log('Sending message to enhanced AI conversation...');
+      console.log('Sending message to AI...');
       
-      const conversationHistory = messages.slice(-5).map(m => ({
+      const conversationHistory = messages.slice(-10).map(m => ({
         role: m.sender === 'user' ? 'user' : 'assistant',
         content: m.content
       }));
@@ -390,11 +382,9 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
       });
 
       if (error) {
-        console.error('Error in enhanced AI conversation:', error);
+        console.error('Error in AI conversation:', error);
         throw error;
       }
-
-      console.log('AI response received:', data.response);
 
       const aiMessage = {
         id: (Date.now() + 1).toString(),
@@ -411,21 +401,19 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
 
       await updateRealTimeMetrics(content, data.response);
 
-      // CRÍTICO: Siempre generar audio para las respuestas
-      if (audioEnabled && selectedVoice) {
-        console.log('Generating audio for AI response...');
+      // SIEMPRE generar audio para mantener la fluidez
+      if (selectedVoice) {
         await generateAndPlayAudio(data.response, selectedVoice.voiceId);
       } else {
-        setIsSpeaking(false);
-        console.log('Audio disabled or no voice selected');
+        isProcessingRef.current = false;
       }
       
     } catch (error) {
       console.error('Error sending message:', error);
-      setIsSpeaking(false);
+      isProcessingRef.current = false;
       toast({
         title: "Error",
-        description: "Error en la conversación. Inténtalo de nuevo.",
+        description: "Error en la conversación.",
         variant: "destructive",
       });
     }
@@ -480,12 +468,20 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
         pauseStartRef.current = null;
       }
       
-      if (recognitionRef.current && config.interactionMode === 'call') {
-        recognitionRef.current.start();
-        setIsListening(true);
+      setIsPaused(false);
+      setConversationActive(true);
+      
+      if (recognitionRef.current && config.interactionMode === 'call' && !isSpeaking) {
+        setTimeout(() => {
+          try {
+            recognitionRef.current.start();
+            setIsListening(true);
+          } catch (error) {
+            console.log('Error restarting recognition:', error);
+          }
+        }, 500);
       }
       
-      setIsPaused(false);
       toast({
         title: "Sesión reanudada",
         description: "La conversación continúa",
@@ -499,6 +495,7 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
       }
       
       setIsPaused(true);
+      setConversationActive(false);
       toast({
         title: "Sesión pausada",
         description: "La conversación está en pausa",
@@ -510,7 +507,7 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
     if (isListening && recognitionRef.current) {
       recognitionRef.current.stop();
       setIsListening(false);
-    } else if (recognitionRef.current) {
+    } else if (recognitionRef.current && !isSpeaking) {
       recognitionRef.current.start();
       setIsListening(true);
     }
@@ -527,10 +524,15 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
 
   const endSession = async () => {
     setIsActive(false);
+    setConversationActive(false);
     setCallStatus('ended');
     
     if (recognitionRef.current) {
       recognitionRef.current.stop();
+    }
+    
+    if (conversationTimeoutRef.current) {
+      clearTimeout(conversationTimeoutRef.current);
     }
     
     if (messages.length >= 4) {
@@ -596,7 +598,7 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
       console.error('Error evaluating session:', error);
       toast({
         title: "Error en evaluación",
-        description: "No se pudo evaluar la sesión, pero se guardó correctamente",
+        description: "No se pudo evaluar la sesión",
         variant: "destructive",
       });
       
@@ -619,36 +621,6 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
         await sessionManager.endSession(sessionId, fallbackEvaluation.overallScore);
       }
       onComplete(fallbackEvaluation);
-    }
-  };
-
-  const reactivateAgent = async () => {
-    try {
-      console.log('Reactivating agent...');
-      setIsSpeaking(false);
-      setIsListening(false);
-      
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-      }
-      
-      // Reiniciar audio context
-      initializeAudioContext();
-      
-      // Enviar mensaje de reactivación
-      await handleUserMessage("Continúa la conversación");
-      
-      toast({
-        title: "Agente reactivado",
-        description: "La conversación ha sido reiniciada",
-      });
-    } catch (error) {
-      console.error('Error reactivating agent:', error);
-      toast({
-        title: "Error",
-        description: "No se pudo reactivar el agente",
-        variant: "destructive",
-      });
     }
   };
 
@@ -723,6 +695,7 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
             <div className="text-sm">
               <div><strong>Duración:</strong> {Math.floor(sessionTime / 60)}:{(sessionTime % 60).toString().padStart(2, '0')}</div>
               <div><strong>Cliente:</strong> {selectedVoice?.voiceName}</div>
+              <div><strong>Estado:</strong> {isSpeaking ? 'Hablando' : isListening ? 'Escuchando' : 'Esperando'}</div>
             </div>
           </div>
           
@@ -766,16 +739,6 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
             >
               {audioEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
             </Button>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={reactivateAgent}
-              disabled={isPaused}
-              className="bg-blue-50 text-blue-600"
-            >
-              🔄 Reactivar
-            </Button>
             
             <Button variant="destructive" size="sm" onClick={endSession}>
               <PhoneOff className="h-4 w-4 mr-2" />
@@ -791,30 +754,41 @@ const LiveTrainingInterface = ({ config, onComplete, onBack }: LiveTrainingInter
                 <div className="h-full flex flex-col items-center justify-center space-y-6">
                   <div className="text-center">
                     <div className="text-xl font-medium mb-2">
-                      {isPaused ? 'Sesión Pausada' : `Hablando con ${selectedVoice?.voiceName}`}
+                      {isPaused ? 'Sesión Pausada' : `Conversación con ${selectedVoice?.voiceName}`}
                     </div>
                     <div className="text-gray-600 dark:text-gray-400">
                       {isPaused ? "Presiona Reanudar para continuar" :
                        isSpeaking ? `${selectedVoice?.voiceName} está hablando...` : 
-                       isListening ? "Puedes responder ahora..." : 
-                       "Conversación en pausa"}
+                       isListening ? "Habla ahora, te estoy escuchando..." : 
+                       "Conversación en curso"}
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-center space-x-1">
+                  <div className="flex items-center justify-center space-x-2">
                     {[...Array(5)].map((_, i) => (
                       <div
                         key={i}
-                        className={`w-2 rounded-full transition-all duration-300 ${
-                          isPaused ? 'bg-orange-400 h-4' :
-                          isSpeaking ? 'bg-purple-600 h-12 animate-pulse' : 
-                          isListening ? 'bg-green-600 h-8 animate-bounce' : 
-                          'bg-gray-400 h-4'
+                        className={`w-3 h-3 rounded-full transition-all duration-300 ${
+                          isPaused ? 'bg-orange-400' :
+                          isSpeaking ? 'bg-purple-600 animate-pulse' : 
+                          isListening ? 'bg-green-600 animate-bounce' : 
+                          'bg-gray-400'
                         }`}
                         style={{ animationDelay: `${i * 0.1}s` }}
                       />
                     ))}
                   </div>
+
+                  {conversationActive && !isPaused && (
+                    <div className="text-center">
+                      <p className="text-sm text-green-600 font-medium">
+                        ✓ Conversación activa - No necesitas presionar nada
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        La IA responderá automáticamente cuando termines de hablar
+                      </p>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
