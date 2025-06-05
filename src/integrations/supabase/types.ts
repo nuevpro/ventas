@@ -669,6 +669,45 @@ export type Database = {
           },
         ]
       }
+      uploaded_files: {
+        Row: {
+          content_extracted: string | null
+          created_at: string | null
+          file_size: number
+          file_type: string
+          filename: string
+          id: string
+          processing_status: string | null
+          updated_at: string | null
+          upload_url: string | null
+          uploaded_by: string | null
+        }
+        Insert: {
+          content_extracted?: string | null
+          created_at?: string | null
+          file_size: number
+          file_type: string
+          filename: string
+          id?: string
+          processing_status?: string | null
+          updated_at?: string | null
+          upload_url?: string | null
+          uploaded_by?: string | null
+        }
+        Update: {
+          content_extracted?: string | null
+          created_at?: string | null
+          file_size?: number
+          file_type?: string
+          filename?: string
+          id?: string
+          processing_status?: string | null
+          updated_at?: string | null
+          upload_url?: string | null
+          uploaded_by?: string | null
+        }
+        Relationships: []
+      }
       user_achievements: {
         Row: {
           achievement_id: string | null
@@ -922,6 +961,10 @@ export type Database = {
       l2_normalize: {
         Args: { "": string } | { "": unknown } | { "": unknown }
         Returns: unknown
+      }
+      process_uploaded_file: {
+        Args: { p_file_id: string; p_extracted_content: string }
+        Returns: boolean
       }
       respond_to_challenge_invitation: {
         Args: { p_invitation_id: string; p_response: string }

@@ -41,6 +41,15 @@ export const useKnowledgeBase = () => {
 
       console.log('Knowledge base documents loaded successfully:', data?.length || 0, 'documents');
       setDocuments(data || []);
+      
+      // Si no hay documentos, mostrar un mensaje informativo
+      if (!data || data.length === 0) {
+        console.log('No documents found in knowledge base');
+        toast({
+          title: "Información",
+          description: "No hay documentos en la base de conocimientos. Agregue algunos para comenzar.",
+        });
+      }
     } catch (err) {
       console.error('Error in loadDocuments:', err);
       const errorMessage = err instanceof Error ? err.message : 'Error desconocido al cargar documentos';

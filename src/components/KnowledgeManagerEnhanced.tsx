@@ -1,6 +1,5 @@
-
 import React, { useState } from 'react';
-import { Upload, FileText, Trash2, Eye, Plus, Search, Edit } from 'lucide-react';
+import { Upload, FileText, Trash2, Eye, Plus, Search, Edit, Globe } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -10,7 +9,10 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useKnowledgeBase } from '@/hooks/useKnowledgeBase';
+import FileUploadManager from './FileUploadManager';
+import WebScrapingManager from './WebScrapingManager';
 
 const CATEGORIES = [
   'Productos y Servicios',
@@ -127,157 +129,184 @@ const KnowledgeManagerEnhanced = () => {
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <FileText className="h-5 w-5" />
-              <span>Gestión del Conocimiento</span>
-            </div>
-            <Button onClick={() => setIsAddingDocument(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Nuevo Documento
-            </Button>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Search and Filter */}
-          <div className="flex space-x-4">
-            <div className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input
-                  placeholder="Buscar en documentos..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-            </div>
-            <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-              <SelectTrigger className="w-[200px]">
-                <SelectValue placeholder="Todas las categorías" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todas las categorías</SelectItem>
-                {CATEGORIES.map((category) => (
-                  <SelectItem key={category} value={category}>
-                    {category}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+      <Tabs defaultValue="documents" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="documents" className="flex items-center space-x-2">
+            <FileText className="h-4 w-4" />
+            <span>Documentos</span>
+          </TabsTrigger>
+          <TabsTrigger value="files" className="flex items-center space-x-2">
+            <Upload className="h-4 w-4" />
+            <span>Archivos</span>
+          </TabsTrigger>
+          <TabsTrigger value="web" className="flex items-center space-x-2">
+            <Globe className="h-4 w-4" />
+            <span>Web Scraping</span>
+          </TabsTrigger>
+        </TabsList>
 
-          {/* Statistics */}
-          <div className="grid grid-cols-3 gap-4 p-4 bg-gray-50 dark:bg-gray-900 rounded-lg">
-            <div className="text-center">
-              <div className="text-2xl font-bold text-purple-600">{documents.length}</div>
-              <div className="text-sm text-gray-600">Total Documentos</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-blue-600">{new Set(documents.map(d => d.document_type)).size}</div>
-              <div className="text-sm text-gray-600">Categorías</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-green-600">
-                {formatFileSize(documents.reduce((total, doc) => total + (doc.content?.length || 0), 0))}
+        <TabsContent value="documents">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <FileText className="h-5 w-5" />
+                  <span>Base de Conocimiento</span>
+                </div>
+                <Button onClick={() => setIsAddingDocument(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Nuevo Documento
+                </Button>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Search and Filter */}
+              <div className="flex space-x-4">
+                <div className="flex-1">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <Input
+                      placeholder="Buscar en documentos..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+                <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                  <SelectTrigger className="w-[200px]">
+                    <SelectValue placeholder="Todas las categorías" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas las categorías</SelectItem>
+                    {CATEGORIES.map((category) => (
+                      <SelectItem key={category} value={category}>
+                        {category}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-              <div className="text-sm text-gray-600">Tamaño Total</div>
-            </div>
-          </div>
 
-          {/* Documents List */}
-          <div className="space-y-3">
-            {filteredDocuments.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>No se encontraron documentos</p>
+              {/* Statistics */}
+              <div className="grid grid-cols-3 gap-4 p-4 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-purple-600">{documents.length}</div>
+                  <div className="text-sm text-gray-600">Total Documentos</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-blue-600">{new Set(documents.map(d => d.document_type)).size}</div>
+                  <div className="text-sm text-gray-600">Categorías</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-green-600">
+                    {formatFileSize(documents.reduce((total, doc) => total + (doc.content?.length || 0), 0))}
+                  </div>
+                  <div className="text-sm text-gray-600">Tamaño Total</div>
+                </div>
               </div>
-            ) : (
-              filteredDocuments.map((doc) => (
-                <Card key={doc.id} className="hover:shadow-md transition-shadow">
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-3">
-                          <FileText className="h-5 w-5 text-purple-600" />
-                          <div>
-                            <h3 className="font-medium">{doc.title}</h3>
-                            <p className="text-sm text-gray-600 line-clamp-2">
-                              {doc.content?.substring(0, 150)}...
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center space-x-4 mt-3">
-                          <Badge variant="outline">{doc.document_type}</Badge>
-                          <span className="text-xs text-gray-500">
-                            {formatFileSize(doc.content?.length || 0)}
-                          </span>
-                          <span className="text-xs text-gray-500">
-                            {new Date(doc.updated_at || doc.created_at || '').toLocaleDateString()}
-                          </span>
-                          {(doc.tags || []).map((tag) => (
-                            <Badge key={tag} variant="secondary" className="text-xs">
-                              {tag}
-                            </Badge>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="flex space-x-2">
-                        <Dialog>
-                          <DialogTrigger asChild>
-                            <Button variant="outline" size="sm" onClick={() => setSelectedDocument(doc)}>
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
-                            <DialogHeader>
-                              <DialogTitle>{doc.title}</DialogTitle>
-                            </DialogHeader>
-                            <div className="space-y-4">
-                              <div className="flex items-center space-x-4">
-                                <Badge>{doc.document_type}</Badge>
-                                <span className="text-sm text-gray-500">{formatFileSize(doc.content?.length || 0)}</span>
-                                <span className="text-sm text-gray-500">
-                                  Modificado: {new Date(doc.updated_at || doc.created_at || '').toLocaleDateString()}
-                                </span>
-                              </div>
-                              <div className="prose dark:prose-invert max-w-none">
-                                <div className="whitespace-pre-wrap p-4 bg-gray-50 dark:bg-gray-900 rounded-lg">
-                                  {doc.content}
-                                </div>
+
+              {/* Documents List */}
+              <div className="space-y-3">
+                {filteredDocuments.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>No se encontraron documentos</p>
+                  </div>
+                ) : (
+                  filteredDocuments.map((doc) => (
+                    <Card key={doc.id} className="hover:shadow-md transition-shadow">
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-3">
+                              <FileText className="h-5 w-5 text-purple-600" />
+                              <div>
+                                <h3 className="font-medium">{doc.title}</h3>
+                                <p className="text-sm text-gray-600 line-clamp-2">
+                                  {doc.content?.substring(0, 150)}...
+                                </p>
                               </div>
                             </div>
-                          </DialogContent>
-                        </Dialog>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setEditingDocument({
-                            ...doc,
-                            tags: Array.isArray(doc.tags) ? doc.tags.join(', ') : ''
-                          })}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleDeleteDocument(doc.id)}
-                          className="text-red-600 hover:text-red-700"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))
-            )}
-          </div>
-        </CardContent>
-      </Card>
+                            <div className="flex items-center space-x-4 mt-3">
+                              <Badge variant="outline">{doc.document_type}</Badge>
+                              <span className="text-xs text-gray-500">
+                                {formatFileSize(doc.content?.length || 0)}
+                              </span>
+                              <span className="text-xs text-gray-500">
+                                {new Date(doc.updated_at || doc.created_at || '').toLocaleDateString()}
+                              </span>
+                              {(doc.tags || []).map((tag) => (
+                                <Badge key={tag} variant="secondary" className="text-xs">
+                                  {tag}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="flex space-x-2">
+                            <Dialog>
+                              <DialogTrigger asChild>
+                                <Button variant="outline" size="sm" onClick={() => setSelectedDocument(doc)}>
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                              </DialogTrigger>
+                              <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+                                <DialogHeader>
+                                  <DialogTitle>{doc.title}</DialogTitle>
+                                </DialogHeader>
+                                <div className="space-y-4">
+                                  <div className="flex items-center space-x-4">
+                                    <Badge>{doc.document_type}</Badge>
+                                    <span className="text-sm text-gray-500">{formatFileSize(doc.content?.length || 0)}</span>
+                                    <span className="text-sm text-gray-500">
+                                      Modificado: {new Date(doc.updated_at || doc.created_at || '').toLocaleDateString()}
+                                    </span>
+                                  </div>
+                                  <div className="prose dark:prose-invert max-w-none">
+                                    <div className="whitespace-pre-wrap p-4 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                                      {doc.content}
+                                    </div>
+                                  </div>
+                                </div>
+                              </DialogContent>
+                            </Dialog>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setEditingDocument({
+                                ...doc,
+                                tags: Array.isArray(doc.tags) ? doc.tags.join(', ') : ''
+                              })}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDeleteDocument(doc.id)}
+                              className="text-red-600 hover:text-red-700"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="files">
+          <FileUploadManager />
+        </TabsContent>
+
+        <TabsContent value="web">
+          <WebScrapingManager />
+        </TabsContent>
+      </Tabs>
 
       {/* Add Document Dialog */}
       <Dialog open={isAddingDocument} onOpenChange={setIsAddingDocument}>
