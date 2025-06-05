@@ -8,6 +8,33 @@ const corsHeaders = {
 
 const openAIApiKey = Deno.env.get('OPENAI_API_KEY')!
 
+// Retry configuration
+const MAX_RETRIES = 3
+const RETRY_DELAY = 1000 // 1 second
+
+// Helper function to delay execution
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+
+// Helper function to fetch with retry
+async function fetchWithRetry(url: string, options: RequestInit, retries = MAX_RETRIES): Promise<Response> {
+  try {
+    const response = await fetch(url, options)
+    if (!response.ok && retries > 0) {
+      console.log(`Retry ${MAX_RETRIES - retries + 1} - Status: ${response.status}`)
+      await delay(RETRY_DELAY)
+      return fetchWithRetry(url, options, retries - 1)
+    }
+    return response
+  } catch (error) {
+    if (retries > 0) {
+      console.log(`Retry ${MAX_RETRIES - retries + 1} - Error: ${error.message}`)
+      await delay(RETRY_DELAY)
+      return fetchWithRetry(url, options, retries - 1)
+    }
+    throw error
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -31,7 +58,7 @@ serve(async (req) => {
     }
 
     // Extraer contenido web con headers completos para simular navegador real
-    const response = await fetch(validUrl.toString(), {
+    const response = await fetchWithRetry(validUrl.toString(), {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -47,7 +74,7 @@ serve(async (req) => {
     })
 
     if (!response.ok) {
-      throw new Error(`Failed to fetch URL: ${response.status} ${response.statusText}`)
+      throw new Error(`Failed to fetch URL after retries: ${response.status} ${response.statusText}`)
     }
 
     const html = await response.text()
@@ -76,14 +103,14 @@ ${html.substring(0, 15000)}
 IMPORTANTE: Responde SOLO con la información extraída y estructurada en español, sin etiquetas HTML. Sé específico y detallado.`
 
     try {
-      const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+      const openAIResponse = await fetchWithRetry('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${openAIApiKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'gpt-4o',
+          model: 'gpt-4',
           messages: [
             {
               role: 'system',
@@ -124,14 +151,14 @@ Responde en formato JSON válido con esta estructura EXACTA:
   "objections": ["posible objeción 1", "posible objeción 2", "posible objeción 3"]
 }`
 
-      const summaryResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+      const summaryResponse = await fetchWithRetry('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${openAIApiKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'gpt-4o',
+          model: 'gpt-4',
           messages: [
             {
               role: 'system',
