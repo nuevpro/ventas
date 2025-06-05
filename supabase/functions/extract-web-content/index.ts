@@ -35,7 +35,10 @@ serve(async (req) => {
     
     if (!url) {
       return new Response(
-        JSON.stringify({ error: 'URL is required' }),
+        JSON.stringify({ 
+          error: 'URL is required',
+          status: 'error'
+        }),
         { 
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -51,7 +54,10 @@ serve(async (req) => {
       validUrl = new URL(url)
     } catch {
       return new Response(
-        JSON.stringify({ error: 'Invalid URL format' }),
+        JSON.stringify({ 
+          error: 'Invalid URL format',
+          status: 'error'
+        }),
         { 
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -119,10 +125,9 @@ serve(async (req) => {
         const errorText = await openAIResponse.text()
         console.error('OpenAI API error:', openAIResponse.status, errorText)
         
-        // Return a more detailed error response
         return new Response(
           JSON.stringify({ 
-            error: `OpenAI API error: ${openAIResponse.status} - ${errorText}`,
+            error: `Error en el procesamiento de IA: ${errorText}`,
             status: 'error'
           }),
           { 
@@ -135,19 +140,23 @@ serve(async (req) => {
       const aiResult = await openAIResponse.json()
       const extractedContent = aiResult.choices[0]?.message?.content || 'No se pudo extraer contenido de la página web.'
 
-      return new Response(JSON.stringify({
-        url: validUrl.toString(),
-        title: `Contenido de ${validUrl.hostname}`,
-        content: extractedContent,
-        aiSummary: `Contenido extraído de ${validUrl.hostname}`,
-        keyPoints: ["Contenido procesado exitosamente"],
-        salesInfo: extractedContent.substring(0, 300),
-        objections: ["Verificar información actualizada"],
-        extractedAt: new Date().toISOString(),
-        status: 'completed'
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      return new Response(
+        JSON.stringify({
+          url: validUrl.toString(),
+          title: `Contenido de ${validUrl.hostname}`,
+          content: extractedContent,
+          aiSummary: `Contenido extraído de ${validUrl.hostname}`,
+          keyPoints: ["Contenido procesado exitosamente"],
+          salesInfo: extractedContent.substring(0, 300),
+          objections: ["Verificar información actualizada"],
+          extractedAt: new Date().toISOString(),
+          status: 'completed'
+        }), 
+        {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      )
 
     } catch (aiError) {
       console.error('Error processing with AI:', aiError)
@@ -163,27 +172,32 @@ serve(async (req) => {
                            .replace(/\s+/g, ' ')
                            .trim()
       
-      return new Response(JSON.stringify({
-        url: validUrl.toString(),
-        title: title,
-        content: bodyText.substring(0, 5000),
-        aiSummary: `Contenido extraído de ${validUrl.hostname}`,
-        keyPoints: ["Contenido extraído sin procesamiento AI"],
-        salesInfo: "Información extraída sin análisis AI",
-        objections: ["Verificar información manualmente"],
-        extractedAt: new Date().toISOString(),
-        status: 'completed'
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      return new Response(
+        JSON.stringify({
+          url: validUrl.toString(),
+          title: title,
+          content: bodyText.substring(0, 5000),
+          aiSummary: `Contenido extraído de ${validUrl.hostname} (sin procesamiento AI)`,
+          keyPoints: ["Contenido extraído sin procesamiento AI"],
+          salesInfo: "Información extraída sin análisis AI",
+          objections: ["Verificar información manualmente"],
+          extractedAt: new Date().toISOString(),
+          status: 'completed'
+        }), 
+        {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      )
     }
   } catch (error) {
     console.error('Error in extract-web-content:', error)
     return new Response(
       JSON.stringify({ 
-        error: error.message || 'Failed to extract web content',
+        error: error.message || 'Error al extraer contenido web',
         status: 'error'
-      }), {
+      }), 
+      {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }

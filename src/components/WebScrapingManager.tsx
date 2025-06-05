@@ -105,11 +105,25 @@ const WebScrapingManager = () => {
 
       if (error) {
         console.error('Error in web extraction:', error);
-        throw new Error(error.message || 'Error al extraer contenido web');
+        let errorMessage = 'Error al extraer contenido web';
+        
+        // Check for specific error messages from the edge function
+        if (error.message?.includes('OpenAI API key is not configured')) {
+          errorMessage = 'Error de configuración: La clave de API de OpenAI no está configurada. Por favor contacte al administrador.';
+        } else if (error.message?.includes('Failed to fetch URL')) {
+          errorMessage = 'No se pudo acceder a la URL especificada. Verifique que el sitio esté disponible.';
+        }
+        
+        throw new Error(errorMessage);
       }
 
       if (!data) {
         throw new Error('No se recibieron datos de la extracción');
+      }
+
+      // Check if the response indicates an error
+      if (data.status === 'error') {
+        throw new Error(data.error || 'Error durante la extracción del contenido');
       }
 
       console.log('Web content extracted successfully:', data);
@@ -164,7 +178,7 @@ const WebScrapingManager = () => {
       console.error('Error scraping web content:', error);
       toast({
         title: "Error",
-        description: `Error al extraer contenido: ${error instanceof Error ? error.message : 'Error desconocido'}`,
+        description: error instanceof Error ? error.message : 'Error desconocido al extraer contenido',
         variant: "destructive",
       });
     } finally {
