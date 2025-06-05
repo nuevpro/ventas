@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Globe, Plus, Trash2, AlertCircle, CheckCircle, ExternalLink, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -25,6 +24,38 @@ const WebScrapingManager = () => {
   const [scraping, setScraping] = useState(false);
   const [scrapedContent, setScrapedContent] = useState<ScrapedContent[]>([]);
   const { toast } = useToast();
+
+  useEffect(() => {
+    // Load previously scraped content from knowledge_base
+    const loadScrapedContent = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('knowledge_base')
+          .select('*')
+          .eq('document_type', 'web_scraping')
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        const formattedData: ScrapedContent[] = (data || []).map(item => ({
+          id: item.id,
+          url: item.source_url || '',
+          title: item.title,
+          content: item.content || '',
+          aiSummary: item.ai_summary,
+          keyPoints: item.key_points,
+          status: item.extraction_status || 'completed',
+          created_at: item.created_at || new Date().toISOString()
+        }));
+
+        setScrapedContent(formattedData);
+      } catch (error) {
+        console.error('Error loading scraped content:', error);
+      }
+    };
+
+    loadScrapedContent();
+  }, []);
 
   const isValidUrl = (urlString: string) => {
     try {
@@ -56,9 +87,14 @@ const WebScrapingManager = () => {
 
     try {
       setScraping(true);
-      console.log('Starting real web scraping for:', url);
+      toast({
+        title: "Procesando",
+        description: "Extrayendo contenido de la web, esto puede tomar unos momentos...",
+      });
 
-      // Usar la nueva edge function para extracción real
+      console.log('Starting web scraping for:', url);
+
+      // Usar la edge function para extracción real
       const { data, error } = await supabase.functions.invoke('extract-web-content', {
         body: { url }
       });
@@ -74,7 +110,7 @@ const WebScrapingManager = () => {
       const { data: kbData, error: kbError } = await supabase
         .from('knowledge_base')
         .insert({
-          title: data.title,
+          title: data.title || `Contenido de ${new URL(url).hostname}`,
           content: data.content,
           document_type: 'web_scraping',
           tags: ['web', 'scraping', new URL(url).hostname],
@@ -100,7 +136,7 @@ const WebScrapingManager = () => {
       const newContent: ScrapedContent = {
         id: kbData.id,
         url: data.url,
-        title: data.title,
+        title: data.title || `Contenido de ${new URL(url).hostname}`,
         content: data.content,
         aiSummary: data.aiSummary,
         keyPoints: data.keyPoints,
@@ -261,6 +297,11 @@ const WebScrapingManager = () => {
                                 {point}
                               </Badge>
                             ))}
+                            {item.keyPoints.length > 3 && (
+                              <Badge variant="secondary" className="text-xs">
+                                +{item.keyPoints.length - 3} más
+                              </Badge>
+                            )}
                           </div>
                         </div>
                       )}

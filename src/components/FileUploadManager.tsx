@@ -1,4 +1,3 @@
-
 import React, { useEffect, useCallback } from 'react';
 import { Upload, File, Trash2, AlertCircle, CheckCircle, Clock, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';

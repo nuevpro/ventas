@@ -1,4 +1,3 @@
-
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import "https://deno.land/x/xhr@0.1.0/mod.ts"
 
@@ -72,46 +71,47 @@ Instrucciones específicas para extracción:
 10. **Datos técnicos** relevantes para ventas
 
 Contenido HTML para análisis:
-${html.substring(0, 8000)}
+${html.substring(0, 15000)}
 
 IMPORTANTE: Responde SOLO con la información extraída y estructurada en español, sin etiquetas HTML. Sé específico y detallado.`
 
-    const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${openAIApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          {
-            role: 'system',
-            content: 'Eres un experto en extracción y análisis de contenido web. Tu trabajo es extraer información completa y detallada de páginas web para entrenamientos de ventas. Siempre responde en español con información específica y útil.'
-          },
-          {
-            role: 'user',
-            content: extractionPrompt
-          }
-        ],
-        max_tokens: 2000,
-        temperature: 0.2,
-      }),
-    })
+    try {
+      const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${openAIApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o',
+          messages: [
+            {
+              role: 'system',
+              content: 'Eres un experto en extracción y análisis de contenido web. Tu trabajo es extraer información completa y detallada de páginas web para entrenamientos de ventas. Siempre responde en español con información específica y útil.'
+            },
+            {
+              role: 'user',
+              content: extractionPrompt
+            }
+          ],
+          max_tokens: 4000,
+          temperature: 0.2,
+        }),
+      })
 
-    if (!openAIResponse.ok) {
-      const errorText = await openAIResponse.text()
-      console.error('OpenAI API error:', openAIResponse.status, errorText)
-      throw new Error(`OpenAI API error: ${openAIResponse.status}`)
-    }
+      if (!openAIResponse.ok) {
+        const errorText = await openAIResponse.text()
+        console.error('OpenAI API error:', openAIResponse.status, errorText)
+        throw new Error(`OpenAI API error: ${openAIResponse.status}`)
+      }
 
-    const aiResult = await openAIResponse.json()
-    const extractedContent = aiResult.choices[0]?.message?.content || 'No se pudo extraer contenido de la página web.'
+      const aiResult = await openAIResponse.json()
+      const extractedContent = aiResult.choices[0]?.message?.content || 'No se pudo extraer contenido de la página web.'
 
-    console.log('Content extracted successfully, length:', extractedContent.length)
+      console.log('Content extracted successfully, length:', extractedContent.length)
 
-    // Generar resumen con puntos clave
-    const summaryPrompt = `Basándote en el siguiente contenido extraído de la página web ${validUrl.toString()}, genera un análisis estructurado para entrenamientos de ventas:
+      // Generar resumen con puntos clave
+      const summaryPrompt = `Basándote en el siguiente contenido extraído de la página web ${validUrl.toString()}, genera un análisis estructurado para entrenamientos de ventas:
 
 Contenido extraído:
 ${extractedContent}
@@ -124,64 +124,98 @@ Responde en formato JSON válido con esta estructura EXACTA:
   "objections": ["posible objeción 1", "posible objeción 2", "posible objeción 3"]
 }`
 
-    const summaryResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${openAIApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          {
-            role: 'system',
-            content: 'Eres un analista experto que estructura información web para entrenamientos de ventas. Responde SIEMPRE en JSON válido y en español.'
-          },
-          {
-            role: 'user',
-            content: summaryPrompt
+      const summaryResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${openAIApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o',
+          messages: [
+            {
+              role: 'system',
+              content: 'Eres un analista experto que estructura información web para entrenamientos de ventas. Responde SIEMPRE en JSON válido y en español.'
+            },
+            {
+              role: 'user',
+              content: summaryPrompt
+            }
+          ],
+          max_tokens: 1000,
+          temperature: 0.1,
+        }),
+      })
+
+      let analysis
+      try {
+        if (summaryResponse.ok) {
+          const summaryResult = await summaryResponse.json()
+          const analysisText = summaryResult.choices[0]?.message?.content || '{}'
+          
+          // Limpiar el texto para asegurar JSON válido
+          const jsonMatch = analysisText.match(/\{[\s\S]*\}/)
+          if (jsonMatch) {
+            analysis = JSON.parse(jsonMatch[0])
+          } else {
+            throw new Error('No JSON found in response')
           }
-        ],
-        max_tokens: 1000,
-        temperature: 0.1,
-      }),
-    })
+        } else {
+          throw new Error('Summary generation failed')
+        }
+      } catch (error) {
+        console.error('Error parsing analysis:', error)
+        analysis = {
+          summary: "Contenido extraído exitosamente de " + validUrl.hostname,
+          keyPoints: ["Información web disponible", "Contenido procesado", "Datos para análisis"],
+          salesInfo: extractedContent.substring(0, 300),
+          objections: ["Verificar información actualizada", "Consultar condiciones específicas"]
+        }
+      }
 
-    let analysis
-    try {
-      if (summaryResponse.ok) {
-        const summaryResult = await summaryResponse.json()
-        const analysisText = summaryResult.choices[0]?.message?.content || '{}'
-        analysis = JSON.parse(analysisText)
-      } else {
-        throw new Error('Summary generation failed')
-      }
-    } catch (error) {
-      console.error('Error parsing analysis:', error)
-      analysis = {
-        summary: "Contenido extraído exitosamente de " + validUrl.hostname,
-        keyPoints: ["Información web disponible", "Contenido procesado", "Datos para análisis"],
-        salesInfo: extractedContent.substring(0, 300),
-        objections: ["Verificar información actualizada", "Consultar condiciones específicas"]
-      }
+      console.log('Web content extraction completed successfully')
+
+      return new Response(JSON.stringify({
+        url: validUrl.toString(),
+        title: `Contenido de ${validUrl.hostname}`,
+        content: extractedContent,
+        aiSummary: analysis.summary,
+        keyPoints: analysis.keyPoints,
+        salesInfo: analysis.salesInfo,
+        objections: analysis.objections,
+        extractedAt: new Date().toISOString(),
+        status: 'completed'
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    } catch (aiError) {
+      console.error('Error processing with AI:', aiError)
+      
+      // Fallback: Extraer contenido básico con regex
+      const titleMatch = html.match(/<title[^>]*>(.*?)<\/title>/i)
+      const title = titleMatch ? titleMatch[1] : validUrl.hostname
+      
+      // Extraer texto visible con regex simple
+      const bodyText = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+                           .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
+                           .replace(/<[^>]+>/g, ' ')
+                           .replace(/\s+/g, ' ')
+                           .trim()
+      
+      return new Response(JSON.stringify({
+        url: validUrl.toString(),
+        title: title,
+        content: bodyText.substring(0, 5000),
+        aiSummary: `Contenido extraído de ${validUrl.hostname}`,
+        keyPoints: ["Contenido extraído sin procesamiento AI"],
+        salesInfo: "Información extraída sin análisis AI",
+        objections: ["Verificar información manualmente"],
+        extractedAt: new Date().toISOString(),
+        status: 'completed'
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
     }
-
-    console.log('Web content extraction completed successfully')
-
-    return new Response(JSON.stringify({
-      url: validUrl.toString(),
-      title: `Contenido de ${validUrl.hostname}`,
-      content: extractedContent,
-      aiSummary: analysis.summary,
-      keyPoints: analysis.keyPoints,
-      salesInfo: analysis.salesInfo,
-      objections: analysis.objections,
-      extractedAt: new Date().toISOString(),
-      status: 'completed'
-    }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    })
-
   } catch (error) {
     console.error('Error in extract-web-content:', error)
     return new Response(JSON.stringify({ 

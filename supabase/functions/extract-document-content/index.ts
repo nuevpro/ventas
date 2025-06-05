@@ -1,4 +1,3 @@
-
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import "https://deno.land/x/xhr@0.1.0/mod.ts"
 
@@ -31,6 +30,7 @@ serve(async (req) => {
         const decodedContent = atob(fileContent)
         extractedText = decodedContent
       } catch (error) {
+        console.error('Error decoding plain text:', error)
         extractedText = fileContent
       }
     } else if (fileType === 'application/json') {
@@ -39,11 +39,12 @@ serve(async (req) => {
         const jsonData = JSON.parse(decodedContent)
         extractedText = JSON.stringify(jsonData, null, 2)
       } catch (error) {
+        console.error('Error parsing JSON:', error)
         extractedText = fileContent
       }
-    } else {
-      // Para PDFs y otros documentos, usar OpenAI GPT-4o-mini para análisis del contenido base64
-      console.log('Processing document with OpenAI GPT-4o-mini...')
+    } else if (fileType.includes('pdf') || fileType.includes('word') || fileType.includes('excel') || fileType.includes('application/')) {
+      // Para PDFs y otros documentos, usar OpenAI GPT-4 Vision para análisis del contenido base64
+      console.log('Processing document with OpenAI GPT-4 Vision...')
       
       const analysisPrompt = `Analiza este documento y extrae TODO el contenido textual visible de manera completa y estructurada.
 
@@ -62,52 +63,59 @@ Instrucciones específicas:
 
 El archivo está en formato base64. Analízalo completamente y responde SOLO con el texto extraído, sin explicaciones adicionales.`
 
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${openAIApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [
-            {
-              role: 'system',
-              content: 'Eres un experto en extracción de texto de documentos. Tu trabajo es extraer TODO el contenido textual de manera precisa y completa. Responde SOLO con el texto extraído.'
-            },
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'text',
-                  text: analysisPrompt
-                },
-                {
-                  type: 'image_url',
-                  image_url: {
-                    url: `data:${fileType};base64,${fileContent}`
+      try {
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${openAIApiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'gpt-4o',
+            messages: [
+              {
+                role: 'system',
+                content: 'Eres un experto en extracción de texto de documentos. Tu trabajo es extraer TODO el contenido textual de manera precisa y completa. Responde SOLO con el texto extraído.'
+              },
+              {
+                role: 'user',
+                content: [
+                  {
+                    type: 'text',
+                    text: analysisPrompt
+                  },
+                  {
+                    type: 'image_url',
+                    image_url: {
+                      url: `data:${fileType};base64,${fileContent}`
+                    }
                   }
-                }
-              ]
-            }
-          ],
-          max_tokens: 4000,
-          temperature: 0.1,
-        }),
-      })
+                ]
+              }
+            ],
+            max_tokens: 4000,
+            temperature: 0.1,
+          }),
+        })
 
-      if (response.ok) {
-        const result = await response.json()
-        extractedText = result.choices[0]?.message?.content || ''
-        
-        if (extractedText.length < 20) {
-          extractedText = `Documento ${fileName} procesado. Tipo: ${fileType}. El contenido no pudo ser extraído completamente.`
+        if (response.ok) {
+          const result = await response.json()
+          extractedText = result.choices[0]?.message?.content || ''
+          
+          if (extractedText.length < 20) {
+            extractedText = `Documento ${fileName} procesado. Tipo: ${fileType}. El contenido no pudo ser extraído completamente.`
+          }
+        } else {
+          const errorText = await response.text()
+          console.error(`OpenAI API error: ${response.status} - ${errorText}`)
+          throw new Error(`OpenAI API error: ${response.status}`)
         }
-      } else {
-        const errorText = await response.text()
-        console.error(`OpenAI API error: ${response.status} - ${errorText}`)
-        throw new Error(`OpenAI API error: ${response.status}`)
+      } catch (error) {
+        console.error('Error processing with GPT-4 Vision:', error)
+        extractedText = `Error al procesar el documento ${fileName}. Por favor, intente con un formato diferente.`
       }
+    } else {
+      extractedText = `Tipo de archivo no soportado: ${fileType}. Por favor, use PDF, Word, Excel, CSV, TXT o JSON.`
     }
 
     // Generar resumen y análisis con IA
@@ -117,7 +125,7 @@ El archivo está en formato base64. Analízalo completamente y responde SOLO con
       const summaryPrompt = `Analiza el siguiente contenido extraído de un documento y genera un análisis estructurado:
 
 Contenido del documento "${fileName}":
-${extractedText}
+${extractedText.substring(0, 8000)}
 
 Responde en formato JSON válido con esta estructura EXACTA:
 {
@@ -136,7 +144,7 @@ Responde en formato JSON válido con esta estructura EXACTA:
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            model: 'gpt-4o-mini',
+            model: 'gpt-4o',
             messages: [
               {
                 role: 'system',
