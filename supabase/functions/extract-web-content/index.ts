@@ -31,7 +31,7 @@ serve(async (req) => {
       throw new Error('Invalid URL format')
     }
 
-    // Extraer contenido web
+    // Extraer contenido web con headers completos para simular navegador real
     const response = await fetch(validUrl.toString(), {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -40,6 +40,10 @@ serve(async (req) => {
         'Accept-Encoding': 'gzip, deflate',
         'Connection': 'keep-alive',
         'Upgrade-Insecure-Requests': '1',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Cache-Control': 'max-age=0'
       }
     })
 
@@ -51,28 +55,26 @@ serve(async (req) => {
     console.log('HTML content fetched, length:', html.length)
     
     // Procesar contenido con OpenAI para extraer información relevante
-    const extractionPrompt = `
-Extrae el contenido principal de esta página web y estructura la información de manera útil para entrenamiento de ventas.
+    const extractionPrompt = `Analiza y extrae COMPLETAMENTE el contenido principal de esta página web. Es crucial que proporciones información real y detallada.
 
 URL: ${validUrl.toString()}
 
-Incluye y organiza la siguiente información si está disponible:
-1. Título principal de la página
-2. Descripción de productos/servicios ofrecidos
-3. Precios, tarifas o costos mencionados
-4. Características principales de productos/servicios
-5. Información de contacto (teléfonos, emails, direcciones)
-6. Horarios de atención
-7. Promociones o ofertas especiales
-8. Información sobre la empresa
-9. Testimonios o reseñas de clientes
-10. Cualquier dato relevante para ventas
+Instrucciones específicas para extracción:
+1. **Título principal** de la página y subtítulos importantes
+2. **Productos/servicios** ofrecidos con descripciones detalladas
+3. **Precios, tarifas, costos** mencionados (incluye monedas y condiciones)
+4. **Características principales** de productos/servicios
+5. **Información de contacto** completa (teléfonos, emails, direcciones físicas)
+6. **Horarios de atención** y disponibilidad
+7. **Promociones y ofertas especiales** activas
+8. **Información corporativa** (sobre la empresa, historia, misión)
+9. **Testimonios y reseñas** de clientes si existen
+10. **Datos técnicos** relevantes para ventas
 
-Contenido HTML (primeros 8000 caracteres):
+Contenido HTML para análisis:
 ${html.substring(0, 8000)}
 
-Responde SOLO con la información extraída en español, sin etiquetas HTML, organizada de forma clara y estructurada.
-`
+IMPORTANTE: Responde SOLO con la información extraída y estructurada en español, sin etiquetas HTML. Sé específico y detallado.`
 
     const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -85,7 +87,7 @@ Responde SOLO con la información extraída en español, sin etiquetas HTML, org
         messages: [
           {
             role: 'system',
-            content: 'Eres un experto en extraer y estructurar información web para entrenamientos de ventas. Extrae solo información relevante, útil y verificable. Responde en español.'
+            content: 'Eres un experto en extracción y análisis de contenido web. Tu trabajo es extraer información completa y detallada de páginas web para entrenamientos de ventas. Siempre responde en español con información específica y útil.'
           },
           {
             role: 'user',
@@ -98,7 +100,8 @@ Responde SOLO con la información extraída en español, sin etiquetas HTML, org
     })
 
     if (!openAIResponse.ok) {
-      console.error('OpenAI API error:', openAIResponse.status)
+      const errorText = await openAIResponse.text()
+      console.error('OpenAI API error:', openAIResponse.status, errorText)
       throw new Error(`OpenAI API error: ${openAIResponse.status}`)
     }
 
@@ -108,20 +111,18 @@ Responde SOLO con la información extraída en español, sin etiquetas HTML, org
     console.log('Content extracted successfully, length:', extractedContent.length)
 
     // Generar resumen con puntos clave
-    const summaryPrompt = `
-Basándote en el siguiente contenido extraído de una página web, genera un análisis estructurado:
+    const summaryPrompt = `Basándote en el siguiente contenido extraído de la página web ${validUrl.toString()}, genera un análisis estructurado para entrenamientos de ventas:
 
 Contenido extraído:
 ${extractedContent}
 
-Responde en formato JSON con esta estructura exacta:
+Responde en formato JSON válido con esta estructura EXACTA:
 {
-  "summary": "Resumen ejecutivo en 2-3 párrafos",
+  "summary": "Resumen ejecutivo en 2-3 párrafos sobre el negocio y sus ofertas",
   "keyPoints": ["punto clave 1", "punto clave 2", "punto clave 3", "punto clave 4", "punto clave 5"],
-  "salesInfo": "Información específica para equipos de ventas",
+  "salesInfo": "Información específica y estratégica para equipos de ventas",
   "objections": ["posible objeción 1", "posible objeción 2", "posible objeción 3"]
-}
-`
+}`
 
     const summaryResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -134,7 +135,7 @@ Responde en formato JSON con esta estructura exacta:
         messages: [
           {
             role: 'system',
-            content: 'Analista experto que estructura información para entrenamientos de ventas. Responde SIEMPRE en JSON válido.'
+            content: 'Eres un analista experto que estructura información web para entrenamientos de ventas. Responde SIEMPRE en JSON válido y en español.'
           },
           {
             role: 'user',

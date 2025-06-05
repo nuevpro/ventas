@@ -42,27 +42,25 @@ serve(async (req) => {
         extractedText = fileContent
       }
     } else {
-      // Para PDFs y otros documentos, usar OpenAI para análisis del contenido base64
-      console.log('Processing document with OpenAI vision...')
+      // Para PDFs y otros documentos, usar OpenAI GPT-4o-mini para análisis del contenido base64
+      console.log('Processing document with OpenAI GPT-4o-mini...')
       
-      const analysisPrompt = `
-Analiza este archivo y extrae toda la información textual disponible.
+      const analysisPrompt = `Analiza este documento y extrae TODO el contenido textual visible de manera completa y estructurada.
 
 Archivo: ${fileName}
 Tipo: ${fileType}
 
-Este archivo puede contener texto, tablas, o información estructurada. Por favor:
+Instrucciones específicas:
+1. Extrae ABSOLUTAMENTE TODO el texto visible en el documento
+2. Mantén el orden y estructura original del contenido
+3. Si hay tablas, represéntalas claramente con separadores
+4. Incluye títulos, subtítulos, párrafos, listas, fechas, números
+5. Extrae información de contacto (teléfonos, emails, direcciones)
+6. Identifica precios, productos, servicios mencionados
+7. Conserva referencias, códigos, números de documento
+8. Si encuentras formularios, incluye los campos y valores
 
-1. Extrae TODO el texto visible en el documento
-2. Mantén la estructura y formato cuando sea posible
-3. Si hay tablas, represéntalas de forma clara
-4. Incluye títulos, subtítulos y contenido
-5. Extrae fechas, números de referencia, contactos
-6. Identifica información comercial relevante (precios, productos, servicios)
-
-Responde SOLO con el texto extraído del documento, sin explicaciones adicionales.
-Si no puedes extraer texto, responde con "ERROR_EXTRACTION".
-`
+El archivo está en formato base64. Analízalo completamente y responde SOLO con el texto extraído, sin explicaciones adicionales.`
 
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
@@ -75,7 +73,7 @@ Si no puedes extraer texto, responde con "ERROR_EXTRACTION".
           messages: [
             {
               role: 'system',
-              content: 'Eres un experto en extracción de texto de documentos. Extrae todo el contenido textual visible sin agregar comentarios o explicaciones.'
+              content: 'Eres un experto en extracción de texto de documentos. Tu trabajo es extraer TODO el contenido textual de manera precisa y completa. Responde SOLO con el texto extraído.'
             },
             {
               role: 'user',
@@ -102,40 +100,33 @@ Si no puedes extraer texto, responde con "ERROR_EXTRACTION".
         const result = await response.json()
         extractedText = result.choices[0]?.message?.content || ''
         
-        if (extractedText === 'ERROR_EXTRACTION' || extractedText.length < 10) {
-          // Fallback: intento de extracción básica
-          extractedText = `Documento ${fileType} procesado. Contenido extraído del archivo ${fileName}.`
+        if (extractedText.length < 20) {
+          extractedText = `Documento ${fileName} procesado. Tipo: ${fileType}. El contenido no pudo ser extraído completamente.`
         }
       } else {
+        const errorText = await response.text()
+        console.error(`OpenAI API error: ${response.status} - ${errorText}`)
         throw new Error(`OpenAI API error: ${response.status}`)
       }
     }
 
-    // Generar resumen y análisis con IA solo si tenemos contenido válido
+    // Generar resumen y análisis con IA
     if (extractedText.length > 20) {
       console.log('Generating AI summary and analysis...')
       
-      const summaryPrompt = `
-Analiza el siguiente contenido extraído de un documento y genera:
+      const summaryPrompt = `Analiza el siguiente contenido extraído de un documento y genera un análisis estructurado:
 
-1. Un resumen ejecutivo del contenido (máximo 200 palabras)
-2. Lista de 5-7 puntos clave identificados
-3. Información relevante para entrenamientos de ventas
-4. Datos importantes extraídos (precios, fechas, contactos, etc.)
-5. Tipo de documento identificado
-
-Contenido del documento:
+Contenido del documento "${fileName}":
 ${extractedText}
 
-Responde SOLO en formato JSON con esta estructura exacta:
+Responde en formato JSON válido con esta estructura EXACTA:
 {
-  "summary": "string",
-  "keyPoints": ["punto1", "punto2", "punto3"],
-  "salesRelevant": "string", 
-  "importantData": ["dato1", "dato2"],
-  "documentType": "string"
-}
-`
+  "summary": "Resumen ejecutivo del contenido en máximo 200 palabras",
+  "keyPoints": ["punto clave 1", "punto clave 2", "punto clave 3", "punto clave 4", "punto clave 5"],
+  "salesRelevant": "Información específica relevante para ventas y negociación", 
+  "importantData": ["dato importante 1", "dato importante 2", "dato importante 3"],
+  "documentType": "Tipo de documento identificado"
+}`
 
       try {
         const summaryResponse = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -149,7 +140,7 @@ Responde SOLO en formato JSON con esta estructura exacta:
             messages: [
               {
                 role: 'system',
-                content: 'Eres un analista de documentos. Responde SIEMPRE en JSON válido con la estructura solicitada.'
+                content: 'Eres un analista experto en documentos. Responde SIEMPRE en JSON válido con la estructura exacta solicitada.'
               },
               {
                 role: 'user',
