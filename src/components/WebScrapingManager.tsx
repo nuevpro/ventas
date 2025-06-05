@@ -50,11 +50,16 @@ const WebScrapingManager = () => {
         setScrapedContent(formattedData);
       } catch (error) {
         console.error('Error loading scraped content:', error);
+        toast({
+          title: "Error",
+          description: "No se pudo cargar el contenido previo",
+          variant: "destructive",
+        });
       }
     };
 
     loadScrapedContent();
-  }, []);
+  }, [toast]);
 
   const isValidUrl = (urlString: string) => {
     try {
@@ -93,7 +98,7 @@ const WebScrapingManager = () => {
 
       console.log('Starting web scraping for:', url);
 
-      // Usar la edge function para extracción real
+      // Call the edge function
       const { data, error } = await supabase.functions.invoke('extract-web-content', {
         body: { url }
       });
@@ -103,9 +108,13 @@ const WebScrapingManager = () => {
         throw new Error(error.message || 'Error al extraer contenido web');
       }
 
+      if (!data) {
+        throw new Error('No se recibieron datos de la extracción');
+      }
+
       console.log('Web content extracted successfully:', data);
 
-      // Agregar a la base de conocimientos
+      // Add to knowledge base
       const { data: kbData, error: kbError } = await supabase
         .from('knowledge_base')
         .insert({
@@ -131,7 +140,7 @@ const WebScrapingManager = () => {
         throw new Error('Error al guardar en la base de conocimientos');
       }
 
-      // Agregar a la lista local
+      // Add to local list
       const newContent: ScrapedContent = {
         id: kbData.id,
         url: data.url,
