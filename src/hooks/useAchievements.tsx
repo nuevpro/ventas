@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -37,7 +36,7 @@ export const useAchievements = () => {
       setLoading(true);
       setError(null);
 
-      // Obtener todos los logros disponibles
+      // Get all available achievements
       const { data: allAchievements, error: achievementsError } = await supabase
         .from('achievements')
         .select('*')
@@ -50,28 +49,10 @@ export const useAchievements = () => {
 
       setAvailableAchievements(allAchievements || []);
 
-      // Obtener los logros del usuario con join específico
+      // Get user achievements with a separate query for achievements
       const { data: userAchievements, error: userError } = await supabase
         .from('user_achievements')
-        .select(`
-          id,
-          user_id,
-          achievement_id,
-          progress,
-          target,
-          earned_at,
-          achievements:achievement_id (
-            id,
-            title,
-            description,
-            icon,
-            category,
-            xp_reward,
-            requirements,
-            is_active,
-            created_at
-          )
-        `)
+        .select('*')
         .eq('user_id', user.id);
 
       if (userError) {
@@ -79,26 +60,35 @@ export const useAchievements = () => {
         throw userError;
       }
 
-      // Transformar los datos para que coincidan con el tipo UserAchievement
-      const transformedAchievements: UserAchievement[] = (userAchievements || []).map(ua => {
-        const achievementData = ua.achievements;
-        if (!achievementData || typeof achievementData !== 'object') {
-          console.warn('Missing achievement data for user achievement:', ua.id);
-          return null;
-        }
+      // Fetch the full achievement details for each user achievement
+      const achievementDetails = await Promise.all(
+        (userAchievements || []).map(async (ua) => {
+          const { data: achievement, error: achievementError } = await supabase
+            .from('achievements')
+            .select('*')
+            .eq('id', ua.achievement_id)
+            .single();
 
-        return {
-          id: ua.id,
-          user_id: ua.user_id || '',
-          achievement_id: ua.achievement_id || '',
-          progress: ua.progress || 0,
-          target: ua.target || 1,
-          earned_at: ua.earned_at,
-          achievement: achievementData as Achievement
-        };
-      }).filter(Boolean) as UserAchievement[];
+          if (achievementError) {
+            console.error('Error loading achievement details:', achievementError);
+            return null;
+          }
 
-      setAchievements(transformedAchievements);
+          return {
+            id: ua.id,
+            user_id: ua.user_id,
+            achievement_id: ua.achievement_id,
+            progress: ua.progress || 0,
+            target: ua.target || 1,
+            earned_at: ua.earned_at,
+            achievement: achievement
+          };
+        })
+      );
+
+      // Filter out any null results from failed queries
+      const validAchievements = achievementDetails.filter((a): a is UserAchievement => a !== null);
+      setAchievements(validAchievements);
     } catch (err) {
       console.error('Error in loadAchievements:', err);
       setError(err instanceof Error ? err.message : 'Error desconocido');
