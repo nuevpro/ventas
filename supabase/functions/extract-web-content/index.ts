@@ -8,36 +8,6 @@ const corsHeaders = {
 
 // Validate OpenAI API key
 const openAIApiKey = Deno.env.get('OPENAI_API_KEY')
-if (!openAIApiKey) {
-  console.error('OPENAI_API_KEY environment variable is not set')
-}
-
-// Retry configuration
-const MAX_RETRIES = 3
-const RETRY_DELAY = 1000 // 1 second
-
-// Helper function to delay execution
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
-
-// Helper function to fetch with retry
-async function fetchWithRetry(url: string, options: RequestInit, retries = MAX_RETRIES): Promise<Response> {
-  try {
-    const response = await fetch(url, options)
-    if (!response.ok && retries > 0) {
-      console.log(`Retry ${MAX_RETRIES - retries + 1} - Status: ${response.status}`)
-      await delay(RETRY_DELAY)
-      return fetchWithRetry(url, options, retries - 1)
-    }
-    return response
-  } catch (error) {
-    if (retries > 0) {
-      console.log(`Retry ${MAX_RETRIES - retries + 1} - Error: ${error.message}`)
-      await delay(RETRY_DELAY)
-      return fetchWithRetry(url, options, retries - 1)
-    }
-    throw error
-  }
-}
 
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -46,9 +16,19 @@ serve(async (req) => {
   }
 
   try {
-    // Validate OpenAI API key before proceeding
+    // Early validation of OpenAI API key
     if (!openAIApiKey) {
-      throw new Error('OpenAI API key is not configured')
+      console.error('OpenAI API key is not configured')
+      return new Response(
+        JSON.stringify({ 
+          error: 'OpenAI API key is not configured. Please set up the OPENAI_API_KEY environment variable.',
+          status: 'error'
+        }),
+        { 
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      )
     }
 
     const { url } = await req.json()
@@ -79,8 +59,8 @@ serve(async (req) => {
       )
     }
 
-    // Extraer contenido web con headers completos para simular navegador real
-    const response = await fetchWithRetry(validUrl.toString(), {
+    // Fetch web content with complete headers to simulate real browser
+    const response = await fetch(validUrl.toString(), {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -98,7 +78,8 @@ serve(async (req) => {
     if (!response.ok) {
       return new Response(
         JSON.stringify({ 
-          error: `Failed to fetch URL: ${response.status} ${response.statusText}` 
+          error: `Failed to fetch URL: ${response.status} ${response.statusText}`,
+          status: 'error'
         }),
         { 
           status: response.status,
@@ -111,7 +92,7 @@ serve(async (req) => {
     console.log('HTML content fetched, length:', html.length)
     
     try {
-      const openAIResponse = await fetchWithRetry('https://api.openai.com/v1/chat/completions', {
+      const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${openAIApiKey}`,
@@ -137,13 +118,23 @@ serve(async (req) => {
       if (!openAIResponse.ok) {
         const errorText = await openAIResponse.text()
         console.error('OpenAI API error:', openAIResponse.status, errorText)
-        throw new Error(`OpenAI API error: ${openAIResponse.status}`)
+        
+        // Return a more detailed error response
+        return new Response(
+          JSON.stringify({ 
+            error: `OpenAI API error: ${openAIResponse.status} - ${errorText}`,
+            status: 'error'
+          }),
+          { 
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          }
+        )
       }
 
       const aiResult = await openAIResponse.json()
       const extractedContent = aiResult.choices[0]?.message?.content || 'No se pudo extraer contenido de la página web.'
 
-      // Fallback response with basic extraction
       return new Response(JSON.stringify({
         url: validUrl.toString(),
         title: `Contenido de ${validUrl.hostname}`,
@@ -161,11 +152,11 @@ serve(async (req) => {
     } catch (aiError) {
       console.error('Error processing with AI:', aiError)
       
-      // Fallback: Extraer contenido básico con regex
+      // Extract basic content with regex as fallback
       const titleMatch = html.match(/<title[^>]*>(.*?)<\/title>/i)
       const title = titleMatch ? titleMatch[1] : validUrl.hostname
       
-      // Extraer texto visible con regex simple
+      // Extract visible text with simple regex
       const bodyText = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
                            .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
                            .replace(/<[^>]+>/g, ' ')
